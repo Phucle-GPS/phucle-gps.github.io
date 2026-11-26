@@ -1,79 +1,104 @@
-# Firmware gateway tủ chiếu sáng – ESP32
+# Firmware gateway tủ điều khiển chiếu sáng – ESP32 (giao thức v2)
 
-Firmware: `tu_chieu_sang/tu_chieu_sang.ino`
-Trang mô phỏng + app giám sát: `../index.html` (chạy được ngay trên trình duyệt, không cần phần cứng)
+- Firmware: `tu_chieu_sang/tu_chieu_sang.ino`
+- App điều khiển (điện thoại + máy tính): `../index.html`, mở tại `https://phucle-gps.github.io/giamsat-tu/`
 
-## 1. Chạy thử trên Wokwi (không cần mua gì)
+## Tủ làm được gì
+
+| Nhóm | Chi tiết |
+|---|---|
+| **Đo đếm** | Điện áp, dòng, công suất, cos φ từng pha; tần số; chỉ số kWh (3 đồng hồ PZEM-016 qua RS485) |
+| **Đầu vào (DI)** | DI1 cửa tủ · DI2 CB tổng · DI3 phản hồi K1 · DI4 phản hồi K2 · DI5 chống sét · DI6 công tắc Tay/Tự động |
+| **Đầu ra (DO)** | K1 Cả đêm · K2 Nửa đêm · K3 Trang trí · K4 Dự phòng, mỗi kênh có lịch riêng |
+| **Điều khiển** | Tự động theo lịch (lưu trong tủ, mất mạng vẫn chạy), hoặc điều khiển từ xa qua app; công tắc tại tủ để Tay thì app không điều khiển được |
+| **Cảnh báo** | Cắt/trộm cáp, mất điện, mất pha, CB tổng nhảy, contactor không đóng/dính, đèn không sáng, sáng ngoài lịch, mở cửa, chống sét hỏng, xe va chạm, nghiêng, lỗi đồng hồ |
+
+## 1. Chạy thử trên Wokwi (không cần phần cứng)
 
 1. Vào https://wokwi.com → **New Project** → **ESP32**.
-2. Dán nội dung `tu_chieu_sang.ino` vào tab `sketch.ino`.
-3. Mở tab `diagram.json`, thay bằng nội dung file `diagram.json` trong thư mục này.
-4. Bấm **Library Manager** → thêm `PubSubClient` (và `ModbusMaster`, hoặc dùng `libraries.txt`).
-5. Sửa `TOPIC_ROOT` trong code thành chuỗi riêng, ví dụ `cs/doi-cs-7f3k2`.
-6. Bấm ▶ chạy. Serial Monitor sẽ hiện `MQTT: da ket noi`.
-7. Mở trang mô phỏng → tab **🧪 Giả lập** → mục *Kết nối thiết bị thật / Wokwi* → nhập cùng mã kênh → **Kết nối**.
-   Tủ `TU-001` gắn nhãn **Thật** sẽ hiện trong danh sách.
+2. Dán `tu_chieu_sang.ino` vào `sketch.ino`, dán `diagram.json` vào tab `diagram.json`.
+3. Library Manager: thêm `PubSubClient` (và `ModbusMaster`).
+4. Đổi `TOPIC_ROOT` thành chuỗi riêng, khó đoán, ví dụ `cs/doi-cs-7f3k2`.
+5. Bấm ▶. Serial Monitor hiện `MQTT: da ket noi`.
+6. Mở app → **Cài đặt** → nhập cùng *Mã kênh* → **Lưu & kết nối**. Tủ `TU-001` gắn nhãn **Thật** sẽ xuất hiện.
 
-Thử trên Wokwi:
-
-| Thao tác trên mạch | Kết quả trên app |
+| Trên mạch Wokwi | App hiển thị |
 |---|---|
-| Vặn biến trở pha A lên ~3A, đợi vài giây, rồi vặn về 0 | **Nghi cắt / trộm cáp – pha A** |
-| Gạt công tắc điện lưới (swMains) | **Mất điện lưới** (không báo nhầm thành cắt cáp) |
-| Gạt công tắc cửa (swDoor) | **Mở cửa tủ trái phép** |
-| Bấm vào MPU6050, kéo gia tốc thật nhanh | **Xe va chạm**; để lệch nhiều thì **Tủ/trụ bị nghiêng** |
-| Trong app bấm 🔧 Bật chế độ bảo trì rồi mở cửa | Không báo |
-| Trong app bấm ⚫ Tắt / 💡 Bật | LED relay trên mạch tắt/sáng |
+| 4 đèn LED | Trạng thái K1–K4; bấm công tắc trong app → đèn LED đổi theo |
+| Gạt công tắc **DI1 Cửa** | DI1 = Mở → cảnh báo **Mở cửa tủ trái phép** (trừ khi bật Bảo trì) |
+| Gạt **DI2 CB** | **CB tổng bị cắt/nhảy**, mất áp |
+| Gạt **DI5 SPD** | **Chống sét hỏng** |
+| Gạt **DI6 Auto** | **Tủ ở chế độ Tay**: lệnh từ app bị từ chối |
+| Kéo gia tốc MPU6050 | **Xe va chạm** / **Tủ bị nghiêng** |
 
-> Nếu vừa chạy đã báo mất điện / mở cửa thì công tắc đang ở vị trí ngược: gạt lại.
-> Ở SIM_MODE relay mặc định **bật cưỡng bức** để thử được bất kỳ giờ nào. Gửi lệnh "🕒 Theo lịch" để chạy theo giờ 18:00–05:30.
+Lỗi điện không có trên Wokwi (cắt cáp, mất lưới, contactor hỏng) có thể tạo bằng lệnh `sim` (mục 4), ví dụ gửi `1 sim cutA 1`.
 
-## 2. Phần cứng thật cho 1 tủ thử nghiệm
+> Nếu vừa chạy đã báo mở cửa / CB cắt thì công tắc đang ở vị trí ngược: gạt lại.
+
+## 2. Phần cứng cho 1 tủ
 
 | Linh kiện | SL | Ghi chú |
 |---|---|---|
-| ESP32 DevKit (hoặc board ESP32 công nghiệp có sẵn RS485 + nguồn 220V) | 1 | |
-| Đồng hồ PZEM-016 (Modbus RS485, 100A, kèm CT kẹp) | 3 | mỗi pha 1 cái, đặt địa chỉ 1, 2, 3 |
-| Module chuyển TTL ↔ RS485 (MAX485 hoặc loại tự đảo chiều) | 1 | |
-| Cảm biến MPU6050 | 1 | gắn chắc vào vỏ tủ |
-| Công tắc từ (reed switch) cửa | 1 | |
-| Module relay 1 kênh 5V (hoặc relay trung gian 24V) | 1 | đóng cuộn hút contactor |
-| Module thẻ microSD + thẻ | 1 | |
-| Nguồn 220VAC → 5VDC (HLK-PM05 hoặc nguồn ray DIN) | 1 | |
-| Router 4G / module SIM (giai đoạn sau) | 1 | trong tủ thường không có Wi-Fi |
+| ESP32 DevKit, hoặc board ESP32 công nghiệp có sẵn RS485, relay, opto | 1 | board công nghiệp gọn và bền hơn trong tủ |
+| Đồng hồ PZEM-016 (RS485, kèm CT kẹp 100A) | 3 | mỗi pha 1 cái, đặt địa chỉ Modbus 1, 2, 3 |
+| Module TTL ↔ RS485 (MAX485 / tự đảo chiều) | 1 | |
+| Module cách ly quang 220VAC (hoặc 24VDC) → 3.3V, 6–8 kênh | 1 | đọc DI: tiếp điểm cửa, CB, phụ contactor, SPD, công tắc Tay/Tự động |
+| Module relay 4 kênh (có opto) | 1 | đóng cuộn hút contactor K1–K4 qua relay trung gian |
+| Công tắc cửa (hành trình / từ) | 1 | |
+| MPU6050 | 1 | gắn chắc vào vỏ tủ |
+| Module microSD + thẻ | 1 | |
+| Nguồn 220VAC → 5VDC ray DIN | 1 | |
+| Router 4G nhỏ, hoặc module SIM 4G | 1 | trong tủ thường không có Wi-Fi |
 
-Giá tham khảo một bộ thử nghiệm khoảng 1–2 triệu đồng (ước lượng, cần kiểm tra lại giá khi mua).
+Giá tham khảo khoảng 1,5–3 triệu đồng/tủ cho bản thử nghiệm (ước lượng, cần kiểm tra lại khi mua).
 
 **Đấu nối (khớp với code):**
 
 | Tín hiệu | Chân ESP32 |
 |---|---|
-| RS485 RO / DI / DE+RE | GPIO16 / GPIO17 / GPIO4 |
-| MPU6050 SDA / SCL | GPIO21 / GPIO22 |
-| Relay contactor | GPIO26 |
-| Reed switch cửa (đầu kia nối GND) | GPIO27 |
+| DO1–DO4 (relay K1–K4) | GPIO25, 26, 27, 14 |
+| DI1–DI6 (ra của module opto) | GPIO34, 35, 36, 39, 32, 33 |
+| RS485 RO / DI / DE+RE | GPIO16 / 17 / 4 |
+| MPU6050 SDA / SCL | GPIO21 / 22 |
 | SD: CS / SCK / MISO / MOSI | GPIO5 / 18 / 19 / 23 |
 
-Rồi đổi `#define SIM_MODE 0`, điền Wi-Fi, broker riêng (có user/mật khẩu) và nạp.
+GPIO34–39 không có điện trở kéo trong; module opto thường có sẵn. Nếu module ra mức thấp khi có tín hiệu, đặt `DI_INVERT = true`.
+Sau đó đổi `#define SIM_MODE 0`, điền Wi-Fi, broker riêng có user/mật khẩu rồi nạp.
 
-> ⚠️ Phần đấu vào mạch 220V/380V của tủ (CT dòng, nguồn, cuộn hút contactor) phải do thợ điện có chuyên môn thực hiện, cắt điện trước khi làm và tuân thủ quy định an toàn của đơn vị. Nên đấu relay **song song** với timer hiện có ở giai đoạn thử nghiệm để nếu gateway hỏng thì đèn vẫn chạy theo timer cũ.
+> ⚠️ **An toàn**: phần đấu vào mạch 220/380V của tủ (CT, nguồn, cuộn hút, tiếp điểm phụ) phải do thợ điện có chuyên môn làm, cắt điện trước khi thao tác, theo quy định của đơn vị.
+> Giai đoạn thử nghiệm nên giữ timer/công tắc Tay hiện có: gateway hỏng thì tủ vẫn chạy bằng mạch cũ. Công tắc Tay/Tự động (DI6) phải là công tắc cứng trong mạch điều khiển, không chỉ là tín hiệu báo.
 
-## 3. Định dạng bản tin MQTT
+## 3. Bản tin MQTT
 
-| Topic | Nội dung |
+| Topic | Hướng | Nội dung |
+|---|---|---|
+| `<ROOT>/tu/<ID>/telemetry` | tủ → app, 10 giây/lần | `{"id","ts","v":[3],"i":[3],"p":[3],"pf":[3],"f","kwh","di":[6],"do":[4],"sch":[[en,onMin,offMin]×4],"mode":"auto/remote","maint","tilt","rssi","up","q","sd"}` |
+| `<ROOT>/tu/<ID>/alarm` | tủ → app | `{"id","code","phase","state":"on/off","ts","msg","v","i"}` (`phase` là A/B/C, hoặc số kênh 1/2 với lỗi contactor) |
+| `<ROOT>/tu/<ID>/ack` | tủ → app | `{"id","ref","ok","msg"}` phản hồi cho từng lệnh |
+| `<ROOT>/tu/<ID>/status` | broker | `online` / `offline` (retained, LWT) |
+| `<ROOT>/tu/<ID>/cmd` | app → tủ | văn bản `"<ref> <lệnh> <tham số>"` |
+
+## 4. Lệnh
+
+| Lệnh | Ý nghĩa |
 |---|---|
-| `<ROOT>/tu/<ID>/telemetry` | `{"id","ts","v":[A,B,C],"i":[A,B,C],"p","kwh","relay","mode","maint","door","tilt","rssi","q","sd"}` mỗi 10 giây |
-| `<ROOT>/tu/<ID>/alarm` | `{"id","code","phase","state":"on/off","ts","msg","v":[...],"i":[...]}` ngay khi có hoặc hết cảnh báo |
-| `<ROOT>/tu/<ID>/status` | `online` / `offline` (retained, LWT) |
-| `<ROOT>/tu/<ID>/cmd` | app gửi xuống: `on`, `off`, `auto`, `maint_on`, `maint_off`, `status` |
+| `12 do 2 1` | Bật K2 (tủ chuyển sang điều khiển từ xa, các kênh khác giữ nguyên) |
+| `13 all 0` | Tắt tất cả kênh |
+| `14 mode auto` | Về chạy theo lịch |
+| `15 sched 2 1 18:00 23:00` | Lịch K2: bật lúc 18:00, tắt lúc 23:00 (lưu vào bộ nhớ tủ) |
+| `16 maint 1` | Bật chế độ bảo trì (không báo mở cửa) |
+| `17 status` | Gửi số liệu ngay |
+| `18 sim cutA 1` | *(chỉ SIM_MODE)* tạo lỗi: `cutA/B/C`, `mains`, `kfail1..4`, `kstuck1..4`, `meter` |
 
-## 4. Logic phát hiện chính
+App chờ `ack` tối đa 10 giây. Không có phản hồi thì báo "Tủ không phản hồi", không âm thầm coi như đã làm.
 
-- **Cắt/trộm cáp**: relay đang đóng, pha đó *đã từng có tải* (≥1A), nay dòng <0.2A **trong khi điện áp vẫn ≥180V** liên tục 3 giây. Còn điện áp nghĩa là đứt ở phía sau tủ, tức là trên tuyến cáp.
-- **Mất điện lưới / mất pha**: điện áp <100V nên không báo nhầm thành cắt cáp.
-- **Đèn không sáng**: đã đóng relay 30 giây, điện áp đủ, nhưng chưa từng có dòng nghĩa là hỏng contactor/CB.
-- **Sáng ban ngày**: relay cắt mà vẫn có dòng nghĩa là dính tiếp điểm contactor.
-- **Va chạm**: lấy mẫu MPU6050 50 lần/giây, gia tốc thay đổi >0.6g. **Nghiêng**: lệch >15° so với lúc lắp.
-- **Mất mạng**: cảnh báo được giữ trong hàng đợi (20 bản tin) + ghi thẻ SD, có mạng lại thì gửi bù.
+## 5. Logic phát hiện chính
 
-Các ngưỡng nằm ở đầu file `.ino`. Cần chỉnh theo tải thực tế từng tủ: tủ có ít đèn thì hạ `I_LOADED`.
+- **Cắt/trộm cáp**: có kênh đang đóng, pha đó đã từng có tải (≥1A), nay dòng <0.2A trong khi điện áp vẫn ≥180V suốt 3 giây.
+- **Mất điện lưới**: cả 3 pha <100V mà CB tổng vẫn đóng. **CB tổng nhảy** thì báo riêng.
+- **Contactor không đóng / dính**: lệnh DO và tiếp điểm phản hồi DI lệch nhau 5 giây.
+- **Đèn không sáng**: contactor đã đóng, có điện áp, nhưng sau 30 giây không có dòng (đứt CB nhánh, cầu chì, cáp).
+- **Sáng ngoài lịch**: mọi kênh đã cắt mà vẫn có dòng.
+- **Mất mạng**: cảnh báo giữ trong hàng đợi (20 bản tin) + ghi thẻ SD, có mạng lại thì gửi bù. Lịch vẫn chạy bằng giờ NTP đã đồng bộ.
+
+Ngưỡng nằm ở đầu file `.ino`, cần chỉnh theo tải từng tủ. App dùng cùng ngưỡng ở mục `CFG`.

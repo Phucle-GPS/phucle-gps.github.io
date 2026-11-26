@@ -3,891 +3,1365 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Giám sát tủ chiếu sáng</title>
-<meta name="description" content="Mô phỏng gateway IoT tủ chiếu sáng công cộng: phát hiện cắt cáp, va chạm, mở tủ, mất điện và phân công sự cố cho tổ đội.">
+<title>Điều khiển tủ chiếu sáng</title>
+<meta name="description" content="App cá nhân giám sát và điều khiển tủ chiếu sáng công cộng: đo dòng, áp, điện năng, đầu vào/ra, cửa tủ, điều khiển từ xa.">
+<meta name="theme-color" content="#1a6fd8">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <style>
 :root{
-  --bg:#f3f5f8; --card:#ffffff; --ink:#17212b; --muted:#5f6b78; --line:#e2e7ed;
-  --accent:#1a6fd8; --accent-ink:#ffffff;
-  --ok:#1f9d55; --warn:#d98a00; --bad:#d63a3a; --off:#8a96a3;
-  --ok-bg:#e6f6ec; --warn-bg:#fff4dc; --bad-bg:#fdeaea; --off-bg:#eef1f4;
-  --pa:#d6451f; --pb:#d9a400; --pc:#2b6fd6;
+  --bg:#f3f5f8; --card:#ffffff; --ink:#17212b; --muted:#5f6b78; --line:#e2e7ed; --soft:#eef1f4;
+  --accent:#1a6fd8; --accent-ink:#ffffff; --accent-bg:#e7f0fd;
+  --ok:#1f9d55; --warn:#c77d00; --bad:#d63a3a; --off:#8a96a3;
+  --ok-bg:#e6f6ec; --warn-bg:#fff4dc; --bad-bg:#fdeaea;
+  --pa:#d6451f; --pb:#c99700; --pc:#2b6fd6; --lamp:#f2b705;
   --shadow:0 2px 10px rgba(16,30,50,.07);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#0f1419; --card:#18202a; --ink:#e7edf3; --muted:#9aa7b4; --line:#2a3542;
-    --accent:#4d9bff; --accent-ink:#06121f;
+    --bg:#0f1419; --card:#18202a; --ink:#e7edf3; --muted:#9aa7b4; --line:#2a3542; --soft:#222c37;
+    --accent:#4d9bff; --accent-ink:#06121f; --accent-bg:#14263d;
     --ok:#3ccf7d; --warn:#f0b13a; --bad:#ff6b6b; --off:#7d8996;
-    --ok-bg:#12301f; --warn-bg:#33270c; --bad-bg:#3a1717; --off-bg:#222c37;
-    --pa:#ff7a52; --pb:#f2c53d; --pc:#5e9bff;
+    --ok-bg:#12301f; --warn-bg:#33270c; --bad-bg:#3a1717;
+    --pa:#ff7a52; --pb:#f2c53d; --pc:#5e9bff; --lamp:#ffd23f;
     --shadow:0 2px 10px rgba(0,0,0,.35);
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0f1419; --card:#18202a; --ink:#e7edf3; --muted:#9aa7b4; --line:#2a3542;
-  --accent:#4d9bff; --accent-ink:#06121f;
+  --bg:#0f1419; --card:#18202a; --ink:#e7edf3; --muted:#9aa7b4; --line:#2a3542; --soft:#222c37;
+  --accent:#4d9bff; --accent-ink:#06121f; --accent-bg:#14263d;
   --ok:#3ccf7d; --warn:#f0b13a; --bad:#ff6b6b; --off:#7d8996;
-  --ok-bg:#12301f; --warn-bg:#33270c; --bad-bg:#3a1717; --off-bg:#222c37;
-  --pa:#ff7a52; --pb:#f2c53d; --pc:#5e9bff;
+  --ok-bg:#12301f; --warn-bg:#33270c; --bad-bg:#3a1717;
+  --pa:#ff7a52; --pb:#f2c53d; --pc:#5e9bff; --lamp:#ffd23f;
   --shadow:0 2px 10px rgba(0,0,0,.35);
 }
 *{box-sizing:border-box}
 html,body{margin:0}
-body{background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;padding-bottom:calc(72px + env(safe-area-inset-bottom))}
-button,select,input{font:inherit;color:inherit}
-header{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--line);padding:10px 16px}
-.hwrap{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.htitle{font-weight:700;font-size:16px;flex:1;min-width:150px}
-.htitle small{display:block;font-weight:400;color:var(--muted);font-size:12px}
-.clock{display:flex;align-items:center;gap:6px;background:var(--off-bg);padding:5px 10px;border-radius:999px;font-variant-numeric:tabular-nums;font-weight:600}
-.clock select{border:0;background:transparent;font-weight:600;padding:0;cursor:pointer}
-main{max-width:760px;margin:0 auto;padding:14px 16px}
-.view{display:none}.view.on{display:block}
-h2{font-size:17px;margin:4px 0 10px}
-h3{font-size:15px;margin:16px 0 8px}
-.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
-.chip{background:var(--card);border-radius:12px;padding:10px;box-shadow:var(--shadow);text-align:center}
-.chip b{display:block;font-size:22px;line-height:1.1}
-.chip span{font-size:12px;color:var(--muted)}
-.chip.ok b{color:var(--ok)}.chip.bad b{color:var(--bad)}.chip.off b{color:var(--off)}
-.list{display:flex;flex-direction:column;gap:10px}
-.card{background:var(--card);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);border-left:5px solid var(--ok)}
-.card.s-bad{border-left-color:var(--bad)}.card.s-warn{border-left-color:var(--warn)}.card.s-off{border-left-color:var(--off)}
-.cab{cursor:pointer}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;padding-bottom:calc(70px + env(safe-area-inset-bottom))}
+a{color:var(--accent);text-decoration:none}
+button,select,input,textarea{font:inherit;color:inherit}
+code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:13px}
+
+/* ---------- Khung ---------- */
+header{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--line);padding:9px 16px}
+.hwrap{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:10px}
+.brand{font-weight:700;font-size:16px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.hchip{display:flex;align-items:center;gap:6px;background:var(--soft);padding:5px 10px;border-radius:999px;font-weight:600;font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--ink)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--off);display:inline-block;flex:none}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}.dot.warn{background:var(--warn)}
+main{max-width:1180px;margin:0 auto;padding:14px 16px 24px}
+nav.nav{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav.nav a{flex:1;text-align:center;padding:8px 2px 9px;font-size:11.5px;color:var(--muted);position:relative}
+nav.nav a b{display:block;font-size:20px;line-height:1.25}
+nav.nav a.on{color:var(--accent);font-weight:700}
+.badge{position:absolute;top:3px;left:calc(50% + 6px);background:var(--bad);color:#fff;border-radius:999px;font-size:11px;padding:0 6px;min-width:18px;font-weight:700;line-height:17px}
+@media (min-width:900px){
+  body{padding-bottom:0;padding-left:210px}
+  nav.nav{top:0;right:auto;width:210px;flex-direction:column;border-top:0;border-right:1px solid var(--line);padding:70px 10px 10px;gap:4px}
+  nav.nav a{flex:none;display:flex;align-items:center;gap:10px;text-align:left;padding:10px 12px;border-radius:10px;font-size:14.5px}
+  nav.nav a b{display:inline;font-size:18px}
+  nav.nav a.on{background:var(--accent-bg)}
+  nav.nav .badge{position:static;margin-left:auto}
+  header{z-index:35;margin-left:-210px;padding-left:16px}
+  .hwrap{max-width:none}
+}
+
+/* ---------- Thành phần ---------- */
+h1{font-size:19px;margin:2px 0 12px}
+h2{font-size:16px;margin:0 0 10px}
+h3{font-size:13px;margin:14px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.muted{color:var(--muted)}.sub{color:var(--muted);font-size:13px}
 .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .grow{flex:1;min-width:0}
+.panel{background:var(--card);border-radius:14px;padding:14px;box-shadow:var(--shadow);margin-bottom:12px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--card);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow)}
+.kpi span{display:block;font-size:12.5px;color:var(--muted)}
+.kpi b{font-size:22px;font-variant-numeric:tabular-nums}
+.kpi b small{font-size:13px;font-weight:600;color:var(--muted);margin-left:3px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}
+@media (max-width:360px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);border-left:5px solid var(--ok);display:block;color:inherit}
+.card.s-bad{border-left-color:var(--bad)}.card.s-warn{border-left-color:var(--warn)}.card.s-off{border-left-color:var(--off)}
 .cid{font-weight:700}
-.sub{color:var(--muted);font-size:13px}
-.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--off-bg);color:var(--muted);white-space:nowrap}
-.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.bad{background:var(--bad-bg);color:var(--bad)}.pill.warn{background:var(--warn-bg);color:var(--warn)}
-.pill.src{background:transparent;border:1px solid var(--line)}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--soft);color:var(--muted);white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.bad{background:var(--bad-bg);color:var(--bad)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.acc{background:var(--accent-bg);color:var(--accent)}
+.lamps{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
+.lamp{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:3px 8px;border-radius:8px;background:var(--soft);color:var(--muted);border:1px solid transparent}
+.lamp i{width:8px;height:8px;border-radius:50%;background:var(--off)}
+.lamp.on{background:var(--warn-bg);color:var(--ink);border-color:var(--lamp)}
+.lamp.on i{background:var(--lamp);box-shadow:0 0 6px var(--lamp)}
+button.lamp{cursor:pointer;padding:5px 10px}
 .phases{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
-.ph{background:var(--off-bg);border-radius:8px;padding:5px 8px;font-size:13px;font-variant-numeric:tabular-nums}
+.ph{background:var(--soft);border-radius:8px;padding:4px 8px;font-size:13px;font-variant-numeric:tabular-nums}
 .ph i{font-style:normal;font-weight:700;margin-right:4px}
 .ph.zero{background:var(--bad-bg);color:var(--bad)}
-.bar{height:4px;border-radius:2px;background:var(--line);margin-top:4px;overflow:hidden}
-.bar div{height:100%}
+.bar{height:4px;border-radius:2px;background:var(--line);margin-top:3px;overflow:hidden}.bar div{height:100%}
 .alarms{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
-.btn{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:8px 12px;cursor:pointer;font-weight:600}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:8px 12px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:6px;justify-content:center}
 .btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
 .btn.danger{color:var(--bad)}
 .btn.sm{padding:5px 10px;font-size:13px}
 .btn.on{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
 .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-.tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px}
-.tabs button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
-.tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.inc .ttl{font-weight:700}
-.inc .act{font-size:13px;color:var(--muted);background:var(--off-bg);border-radius:8px;padding:6px 9px;margin-top:8px}
-.inc select{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:7px 8px}
-.inc .log{font-size:12px;color:var(--muted);margin-top:6px}
-.empty{text-align:center;color:var(--muted);padding:30px 10px}
-nav.bottom{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
-nav.bottom div{display:flex;max-width:760px;width:100%}
-nav.bottom button{flex:1;border:0;background:transparent;padding:9px 4px 10px;font-size:12px;color:var(--muted);cursor:pointer;position:relative}
-nav.bottom button b{display:block;font-size:20px;line-height:1.2}
-nav.bottom button.on{color:var(--accent);font-weight:700}
-.badge{position:absolute;top:4px;left:calc(50% + 6px);background:var(--bad);color:#fff;border-radius:999px;font-size:11px;padding:0 6px;min-width:18px;font-weight:700}
-.panel{background:var(--card);border-radius:14px;padding:14px;box-shadow:var(--shadow);margin-bottom:12px}
-.faults{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-.faults .btn{text-align:left;font-weight:500;font-size:14px}
-.faults .btn small{display:block;color:var(--muted);font-weight:400;font-size:12px}
-.faults .btn.on small{color:inherit}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;padding-bottom:2px;scrollbar-width:none}
+.tabs a,.tabs button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 13px;font-size:13.5px;font-weight:600;white-space:nowrap;color:var(--ink);cursor:pointer}
+.tabs a.on,.tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}
+th{color:var(--muted);font-weight:600;font-size:12.5px}
+td.num,th.num{text-align:right}
+.io{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.io:last-child{border-bottom:0}
+.led{width:14px;height:14px;border-radius:50%;background:var(--off);flex:none}
+.led.on{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.led.bad{background:var(--bad);box-shadow:0 0 6px var(--bad)}
+.led.lampon{background:var(--lamp);box-shadow:0 0 8px var(--lamp)}
+.switch{width:52px;height:30px;border-radius:999px;background:var(--line);border:0;position:relative;cursor:pointer;flex:none;transition:background .2s}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .2s}
+.switch.on{background:var(--ok)}.switch.on::after{left:25px}
+.switch.pending{animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.35}}
 .field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 .field label{font-size:13px;color:var(--muted)}
-.field input,.field select{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 10px}
-.console{background:#0b1016;color:#b9e3c6;border-radius:10px;padding:10px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;height:230px;overflow:auto;white-space:pre-wrap;word-break:break-all}
-.console .t{color:#7fb2ff}.console .a{color:#ff9a8a}.console .s{color:#f2c53d}
-.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;display:none}
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--card);border-radius:18px 18px 0 0;max-height:88vh;overflow:auto;padding:16px 16px calc(20px + env(safe-area-inset-bottom));display:none;max-width:760px;margin:0 auto}
-.sheet.on,.sheet-bg.on{display:block}
-.kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.kv div{background:var(--off-bg);border-radius:10px;padding:8px}
-.kv span{display:block;font-size:12px;color:var(--muted)}
-.kv b{font-variant-numeric:tabular-nums}
-canvas{width:100%;height:150px;display:block;background:var(--off-bg);border-radius:10px}
-.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:4px}
+.field input,.field select,.field textarea,select.in,input.in{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;max-width:100%}
+input[type=time].in{padding:6px 8px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cols{display:grid;grid-template-columns:1fr;gap:12px}
+.cols>*{min-width:0}
+@media (min-width:900px){.cols{grid-template-columns:1fr 1fr}}
+canvas{width:100%;height:170px;display:block;background:var(--soft);border-radius:10px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:5px}
 .legend i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:4px;vertical-align:middle}
-.toast{position:fixed;left:50%;transform:translateX(-50%);top:70px;z-index:60;background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:12px;box-shadow:var(--shadow);font-size:14px;max-width:min(92vw,520px);opacity:0;transition:opacity .2s;pointer-events:none}
+.faults{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.faults .btn{justify-content:flex-start;text-align:left;font-weight:500;font-size:13.5px}
+.console{background:#0b1016;color:#b9e3c6;border-radius:10px;padding:10px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+.console .t{color:#7fb2ff}.console .a{color:#ff9a8a}.console .s{color:#f2c53d}.console .c{color:#d6a8ff}
+.inc .act{font-size:13px;color:var(--muted);background:var(--soft);border-radius:8px;padding:6px 9px;margin-top:8px}
+.inc .log{font-size:12px;color:var(--muted);margin-top:6px}
+.empty{text-align:center;color:var(--muted);padding:28px 10px}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:none}
+.modal{position:fixed;z-index:51;left:0;right:0;bottom:0;background:var(--card);border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));max-height:88vh;overflow:auto;display:none}
+.modal.on,.modal-bg.on{display:block}
+@media (min-width:700px){.modal{left:50%;right:auto;bottom:auto;top:50%;transform:translate(-50%,-50%);width:480px;border-radius:18px}}
+.toast{position:fixed;left:50%;transform:translateX(-50%);top:64px;z-index:60;background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:12px;box-shadow:var(--shadow);font-size:14px;max-width:min(92vw,520px);opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.on{opacity:1}
-.note{font-size:13px;color:var(--muted)}
-pre.report{white-space:pre-wrap;background:var(--off-bg);padding:10px;border-radius:10px;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace}
-@media (max-width:420px){.chips{grid-template-columns:repeat(2,1fr)}.faults .btn{font-size:13px;padding:8px 9px}.kv{grid-template-columns:repeat(2,1fr)}}
+.back{display:inline-block;margin-bottom:6px;font-size:14px}
+.ctl-row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.ctl-row input[type=checkbox]{width:20px;height:20px;flex:none;margin-top:2px}
+.sticky-bar{position:sticky;bottom:calc(64px + env(safe-area-inset-bottom));background:var(--card);border-radius:14px;box-shadow:0 -2px 14px rgba(0,0,0,.12);padding:10px 12px;margin-top:10px}
+@media (min-width:900px){.sticky-bar{bottom:12px}}
+pre.report{white-space:pre-wrap;background:var(--soft);padding:10px;border-radius:10px;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace}
+@media (max-width:420px){.two{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 
 <header>
   <div class="hwrap">
-    <div class="htitle">Giám sát tủ chiếu sáng<small>Mô phỏng gateway IoT · dữ liệu mẫu</small></div>
-    <div class="clock" title="Giờ mô phỏng">
-      <span id="dayIcon">🌙</span><span id="simTime">--:--</span>
-      <select id="speed" aria-label="Tốc độ mô phỏng">
-        <option value="1">1×</option>
-        <option value="60" selected>60×</option>
-        <option value="600">600×</option>
-      </select>
-    </div>
+    <div class="brand">Điều khiển tủ chiếu sáng<small id="hsub">App cá nhân</small></div>
+    <div class="hchip" id="clockChip" title="Giờ mô phỏng"><span id="dayIcon">🌙</span><span id="simTime">--:--</span></div>
+    <a class="hchip" href="#/cai-dat" id="connChip" title="Kết nối"><span class="dot" id="connDot"></span><span id="connTxt">Demo</span></a>
   </div>
 </header>
 
-<main>
-  <!-- ======================= TỦ ĐIỆN ======================= -->
-  <section class="view on" id="v-cab">
-    <div class="chips">
-      <div class="chip"><b id="cTotal">0</b><span>Tổng tủ</span></div>
-      <div class="chip ok"><b id="cOk">0</b><span>Bình thường</span></div>
-      <div class="chip bad"><b id="cBad">0</b><span>Có sự cố</span></div>
-      <div class="chip off"><b id="cOff">0</b><span>Mất kết nối</span></div>
-    </div>
-    <div class="list" id="cabList"></div>
-  </section>
+<nav class="nav" id="nav">
+  <a href="#/" data-r="home"><b>📊</b>Tổng quan</a>
+  <a href="#/tu" data-r="tu"><b>🗄️</b>Tủ</a>
+  <a href="#/dieu-khien" data-r="dieu-khien"><b>🎛️</b>Điều khiển</a>
+  <a href="#/canh-bao" data-r="canh-bao"><b>🚨</b>Cảnh báo<span class="badge" id="incBadge" hidden>0</span></a>
+  <a href="#/cai-dat" data-r="cai-dat"><b>⚙️</b>Cài đặt</a>
+</nav>
 
-  <!-- ======================= SỰ CỐ ======================= -->
-  <section class="view" id="v-inc">
-    <div class="row" style="margin-bottom:8px">
-      <h2 class="grow" style="margin:0">Sự cố cần xử lý</h2>
-      <button class="btn sm" id="btnReport">📋 Báo cáo</button>
-      <button class="btn sm" id="btnCsv">⬇️ Excel</button>
-    </div>
-    <div class="tabs" id="incTabs">
-      <button data-f="open" class="on">Chưa xong</button>
-      <button data-f="new">Mới</button>
-      <button data-f="assigned">Đã giao</button>
-      <button data-f="doing">Đang xử lý</button>
-      <button data-f="done">Hoàn thành</button>
-      <button data-f="all">Tất cả</button>
-    </div>
-    <div class="list" id="incList"></div>
-  </section>
+<main id="main"></main>
 
-  <!-- ======================= GIẢ LẬP ======================= -->
-  <section class="view" id="v-sim">
-    <div class="panel">
-      <h2>Tạo sự cố trên thiết bị giả lập</h2>
-      <div class="field">
-        <label for="simCab">Chọn tủ</label>
-        <select id="simCab"></select>
-      </div>
-      <div class="faults" id="faults"></div>
-      <div class="btns">
-        <button class="btn" id="btnRestore">✅ Khôi phục tủ này</button>
-        <button class="btn" id="btnRandom">🎲 Sự cố ngẫu nhiên: TẮT</button>
-      </div>
-      <h3>Nhảy giờ</h3>
-      <div class="btns" style="margin-top:0">
-        <button class="btn sm" data-jump="17:59:30">17:59 (sắp bật đèn)</button>
-        <button class="btn sm" data-jump="05:29:30">05:29 (sắp tắt đèn)</button>
-        <button class="btn sm" data-jump="12:00:00">12:00 (ban ngày)</button>
-        <button class="btn sm" data-jump="20:00:00">20:00 (ban đêm)</button>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="row"><h2 class="grow" style="margin:0">Bản tin MQTT</h2><button class="btn sm" id="btnClear">Xoá</button></div>
-      <p class="note">Đây chính là các bản tin mà ESP32 trong tủ gửi lên broker. App bên trên chỉ đọc các bản tin này.</p>
-      <div class="console" id="console"></div>
-    </div>
-
-    <div class="panel">
-      <h2>Kết nối thiết bị thật / Wokwi</h2>
-      <p class="note">Chạy firmware trong thư mục <code>firmware/</code> trên wokwi.com hoặc trên ESP32 thật, rồi kết nối tại đây để app nhận dữ liệu thật qua broker HiveMQ công cộng. Chỉ dùng thử nghiệm: broker công cộng ai cũng nghe được, nên đặt mã kênh khó đoán.</p>
-      <div class="field">
-        <label for="mqRoot">Mã kênh (TOPIC_ROOT, trùng với firmware)</label>
-        <input id="mqRoot" value="cs/demo-doi-cs" autocomplete="off">
-      </div>
-      <div class="field">
-        <label for="mqUrl">Broker WebSocket</label>
-        <input id="mqUrl" value="wss://broker.hivemq.com:8884/mqtt" autocomplete="off">
-      </div>
-      <div class="row">
-        <button class="btn pri" id="btnMq">Kết nối</button>
-        <span class="sub" id="mqState">Chưa kết nối</span>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2>Cài đặt</h2>
-      <div class="btns" style="margin-top:0">
-        <button class="btn" id="btnSound">🔕 Âm báo: TẮT</button>
-        <button class="btn danger" id="btnReset">Xoá dữ liệu sự cố</button>
-      </div>
-    </div>
-  </section>
-</main>
-
-<nav class="bottom"><div>
-  <button data-v="cab" class="on"><b>🗄️</b>Tủ điện</button>
-  <button data-v="inc"><b>🚨</b>Sự cố<span class="badge" id="incBadge" hidden>0</span></button>
-  <button data-v="sim"><b>🧪</b>Giả lập</button>
-</div></nav>
-
-<div class="sheet-bg" id="sheetBg"></div>
-<div class="sheet" id="sheet"></div>
+<div class="modal-bg" id="modalBg"></div>
+<div class="modal" id="modal" role="dialog" aria-modal="true"></div>
 <div class="toast" id="toast"></div>
 
 <script>
 'use strict';
 /* =====================================================================
-   CẤU HÌNH – giống hệt firmware tu_chieu_sang.ino
+   1. CẤU HÌNH – các ngưỡng giống hệt firmware tu_chieu_sang.ino
    ===================================================================== */
 const CFG = {
-  I_LOADED: 1.0, I_ZERO: 0.2,
-  V_LOST: 100, V_MIN_OK: 180, V_MAX_OK: 250,
-  TILT_ALARM: 15, VIB_ALARM_G: 0.6,
-  DEBOUNCE_N: 3, VOLT_DEBOUNCE_N: 10,
-  RELAY_GRACE_TICKS: 10,        // firmware: 30 s – rút ngắn cho demo
+  I_LOADED: 1.0, I_ZERO: 0.2, V_LOST: 100, V_MIN_OK: 180, V_MAX_OK: 250,
+  TILT_ALARM: 15, VIB_ALARM_G: 0.6, DEBOUNCE_N: 3, VOLT_DEBOUNCE_N: 10, FB_DEBOUNCE_N: 5,
+  GRACE_TICKS: 10,            // firmware: 30 s – rút ngắn cho demo
   COLLISION_COOLDOWN_TICKS: 60,
-  ON: [18, 0], OFF: [5, 30],
-  TELE_EVERY: 5,                // firmware: 10 s – rút ngắn cho demo
-  LWT_AFTER: 15,                // broker báo offline sau ~15 s mất kết nối
-  OFFLINE_AFTER_S: 30           // app tự coi là mất kết nối nếu im lặng quá lâu
+  TELE_EVERY: 5,              // firmware: 10 s
+  LWT_AFTER: 15, OFFLINE_AFTER_S: 30, CMD_TIMEOUT_MS: 10000, PIN_UNLOCK_MS: 5 * 60000,
+  HIST: 120
 };
+const N_DO = 4;
+const DI = {DOOR: 0, CB: 1, FB1: 2, FB2: 3, SPD: 4, AUTO: 5};
+const FB_OF_DO = [DI.FB1, DI.FB2, -1, -1];
+const DEF_DO = ['K1 · Cả đêm', 'K2 · Nửa đêm', 'K3 · Trang trí', 'K4 · Dự phòng'];
+const DEF_DI = ['Cửa tủ', 'CB tổng', 'Phản hồi K1', 'Phản hồi K2', 'Chống sét (SPD)', 'Công tắc Tay/Tự động'];
+const DI_META = [            // cách đọc mức 1/0 và mức bình thường của từng DI
+  {on: 'Mở', off: 'Đóng', normal: 0},
+  {on: 'Đóng', off: 'Cắt / nhảy', normal: 1},
+  {on: 'Đóng', off: 'Mở', normal: null},
+  {on: 'Đóng', off: 'Mở', normal: null},
+  {on: 'Tốt', off: 'Hỏng', normal: 1},
+  {on: 'Tự động', off: 'Tay tại chỗ', normal: 1}
+];
+const DEF_SCHED = [[1, 1080, 330], [1, 1080, 1380], [1, 1110, 1320], [0, 1080, 330]];
+const SIM_SHARE = [0.6, 0.3, 0.1, 0];
 
 const ALARM = {
-  CAT_CAP:     {label:'Nghi cắt / trộm cáp', sev:3, icon:'✂️', act:'Cử tổ kiểm tra tuyến cáp sau tủ, chụp ảnh hiện trường. Nếu xác nhận mất cắp: báo công an phường, lập biên bản.'},
-  VA_CHAM:     {label:'Xe va chạm',          sev:3, icon:'💥', act:'Kiểm tra trụ/tủ, chụp ảnh, ghi biển số xe và thông tin người gây ra (nếu có), lập biên bản bồi thường.'},
-  MO_CUA:      {label:'Mở cửa tủ trái phép', sev:3, icon:'🚪', act:'Xác minh có tổ nào đang làm việc tại tủ không. Nếu không có: cử người đến kiểm tra ngay.'},
-  MAT_DIEN:    {label:'Mất điện lưới',       sev:2, icon:'⚡', act:'Liên hệ điện lực khu vực hỏi lịch cắt điện hoặc sự cố lưới.'},
-  MAT_PHA:     {label:'Mất pha',             sev:2, icon:'⚡', act:'Kiểm tra CB tổng, cầu chì, đầu cốt pha bị mất.'},
-  KHONG_SANG:  {label:'Đèn không sáng',      sev:2, icon:'🌑', act:'Kiểm tra contactor, CB nhánh, bộ hẹn giờ trong tủ.'},
-  NGHIENG:     {label:'Tủ / trụ bị nghiêng', sev:2, icon:'📐', act:'Kiểm tra móng, chân đế; rào chắn nếu có nguy cơ đổ.'},
-  MAT_KET_NOI: {label:'Mất kết nối thiết bị',sev:2, icon:'📡', act:'Kiểm tra nguồn gateway, SIM 4G / Wi-Fi tại tủ. Thiết bị vẫn ghi log và gửi bù khi có mạng lại.'},
-  SANG_NGAY:   {label:'Đèn sáng ban ngày',   sev:1, icon:'☀️', act:'Nghi dính tiếp điểm contactor – thay contactor.'},
-  DIEN_AP:     {label:'Điện áp bất thường',  sev:1, icon:'〰️', act:'Theo dõi; báo điện lực nếu kéo dài.'},
-  LOI_DONG_HO: {label:'Lỗi đồng hồ RS485',   sev:1, icon:'🔌', act:'Kiểm tra dây RS485, nguồn đồng hồ, địa chỉ Modbus.'}
+  CAT_CAP:     {label: 'Nghi cắt / trộm cáp', sev: 3, icon: '✂️', act: 'Cử tổ kiểm tra tuyến cáp sau tủ, chụp ảnh hiện trường. Nếu xác nhận mất cắp: báo công an phường, lập biên bản.'},
+  VA_CHAM:     {label: 'Xe va chạm', sev: 3, icon: '💥', act: 'Kiểm tra trụ/tủ, chụp ảnh, ghi biển số xe và thông tin người gây ra (nếu có), lập biên bản bồi thường.'},
+  MO_CUA:      {label: 'Mở cửa tủ trái phép', sev: 3, icon: '🚪', act: 'Xác minh có tổ nào đang làm việc tại tủ không. Nếu không có: cử người đến kiểm tra ngay.'},
+  CB_TONG:     {label: 'CB tổng bị cắt / nhảy', sev: 3, icon: '🔻', act: 'Kiểm tra chạm chập trên tuyến trước khi đóng lại CB tổng.'},
+  MAT_DIEN:    {label: 'Mất điện lưới', sev: 2, icon: '⚡', act: 'Liên hệ điện lực khu vực hỏi lịch cắt điện hoặc sự cố lưới.'},
+  MAT_PHA:     {label: 'Mất pha', sev: 2, icon: '⚡', act: 'Kiểm tra cầu chì, đầu cốt pha bị mất, báo điện lực nếu mất từ lưới.'},
+  K_KHONG_DONG:{label: 'Contactor không đóng', sev: 2, icon: '🧲', act: 'Kiểm tra cuộn hút, relay trung gian, dây điều khiển của contactor.'},
+  K_KHONG_CAT: {label: 'Contactor dính, không cắt', sev: 2, icon: '🧲', act: 'Tiếp điểm contactor bị dính – thay contactor.'},
+  KHONG_SANG:  {label: 'Đèn không sáng', sev: 2, icon: '🌑', act: 'Contactor đã đóng nhưng không có dòng: kiểm tra CB nhánh, cầu chì, tuyến cáp.'},
+  NGHIENG:     {label: 'Tủ / trụ bị nghiêng', sev: 2, icon: '📐', act: 'Kiểm tra móng, chân đế; rào chắn nếu có nguy cơ đổ.'},
+  MAT_KET_NOI: {label: 'Mất kết nối thiết bị', sev: 2, icon: '📡', act: 'Kiểm tra nguồn gateway, SIM 4G / Wi-Fi tại tủ. Tủ vẫn chạy theo lịch và gửi bù cảnh báo khi có mạng.'},
+  SPD:         {label: 'Chống sét hỏng', sev: 1, icon: '🌩️', act: 'Thay module chống sét (SPD) trước mùa mưa bão.'},
+  CHE_DO_TAY:  {label: 'Tủ đang ở chế độ Tay', sev: 1, icon: '✋', act: 'Công tắc tại tủ đang để Tay: app không điều khiển được. Nhắc tổ trả về Tự động sau khi làm xong.'},
+  SANG_NGAY:   {label: 'Đèn sáng ngoài lịch', sev: 1, icon: '☀️', act: 'Các kênh đã cắt nhưng vẫn có dòng – kiểm tra đấu nối, contactor.'},
+  DIEN_AP:     {label: 'Điện áp bất thường', sev: 1, icon: '〰️', act: 'Theo dõi; báo điện lực nếu kéo dài.'},
+  LOI_DONG_HO: {label: 'Lỗi đồng hồ RS485', sev: 1, icon: '🔌', act: 'Kiểm tra dây RS485, nguồn đồng hồ, địa chỉ Modbus.'}
 };
-const STATUS = {new:'Mới', assigned:'Đã giao', doing:'Đang xử lý', done:'Hoàn thành'};
-const TEAMS = ['Tổ 1', 'Tổ 2', 'Tổ 3', 'Tổ trực đêm'];
+const ACK_MSG = {'OK': 'Đã thực hiện', 'Tu dang o che do Tay tai cho': 'Tủ đang ở chế độ Tay tại chỗ', 'Tham so sai': 'Tham số sai',
+  'Lich sai': 'Lịch không hợp lệ', 'Che do sai': 'Chế độ không hợp lệ', 'Lenh khong ho tro': 'Thiết bị không hỗ trợ lệnh này', 'Sai cu phap': 'Sai cú pháp'};
+const STATUS = {new: 'Mới', assigned: 'Đã giao', doing: 'Đang xử lý', done: 'Hoàn thành'};
 
 const SAMPLE = [
-  {id:'TU-001', name:'Trục đường số 1',     area:'Khu vực 1', team:'Tổ 1', load:[3.2,2.9,3.4]},
-  {id:'TU-002', name:'Trục đường số 2',     area:'Khu vực 1', team:'Tổ 1', load:[2.4,2.6,2.2]},
-  {id:'TU-003', name:'Nút giao trung tâm',  area:'Khu vực 1', team:'Tổ 1', load:[4.1,3.8,4.0]},
-  {id:'TU-004', name:'Công viên phía Bắc',  area:'Khu vực 2', team:'Tổ 2', load:[1.8,1.6,1.9]},
-  {id:'TU-005', name:'Cầu vượt số 1',       area:'Khu vực 2', team:'Tổ 2', load:[3.5,3.3,3.6]},
-  {id:'TU-006', name:'Đường ven sông',      area:'Khu vực 2', team:'Tổ 2', load:[2.9,3.1,2.7]},
-  {id:'TU-007', name:'Khu dân cư mới',      area:'Khu vực 3', team:'Tổ 3', load:[1.5,1.4,1.6]},
-  {id:'TU-008', name:'Quốc lộ đoạn ngoại ô',area:'Khu vực 3', team:'Tổ 3', load:[5.2,4.9,5.1]}
+  {id: 'TU-001', name: 'Trục đường số 1', area: 'Khu vực 1', team: 'Tổ 1', load: [3.2, 2.9, 3.4]},
+  {id: 'TU-002', name: 'Trục đường số 2', area: 'Khu vực 1', team: 'Tổ 1', load: [2.4, 2.6, 2.2]},
+  {id: 'TU-003', name: 'Nút giao trung tâm', area: 'Khu vực 1', team: 'Tổ 1', load: [4.1, 3.8, 4.0]},
+  {id: 'TU-004', name: 'Công viên phía Bắc', area: 'Khu vực 2', team: 'Tổ 2', load: [1.8, 1.6, 1.9]},
+  {id: 'TU-005', name: 'Cầu vượt số 1', area: 'Khu vực 2', team: 'Tổ 2', load: [3.5, 3.3, 3.6]},
+  {id: 'TU-006', name: 'Đường ven sông', area: 'Khu vực 2', team: 'Tổ 2', load: [2.9, 3.1, 2.7]},
+  {id: 'TU-007', name: 'Khu dân cư mới', area: 'Khu vực 3', team: 'Tổ 3', load: [1.5, 1.4, 1.6]},
+  {id: 'TU-008', name: 'Quốc lộ đoạn ngoại ô', area: 'Khu vực 3', team: 'Tổ 3', load: [5.2, 4.9, 5.1]}
 ];
 
-/* ===================== Tiện ích ===================== */
+/* =====================================================================
+   2. TIỆN ÍCH
+   ===================================================================== */
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 const pad = n => String(n).padStart(2, '0');
-const fmtTime = ms => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}/${pad(d.getMonth()+1)}`; };
 const rnd = (a, b) => a + Math.random() * (b - a);
+const hm = min => `${pad(Math.floor(min / 60) % 24)}:${pad(min % 60)}`;
+const toMin = s => { const [h, m] = String(s).split(':').map(Number); return h * 60 + m; };
+const fmtTime = ms => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}`; };
+const fmtClock = ms => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+const dayKey = ms => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const num = (v, d = 1) => v === null || v === undefined || Number.isNaN(v) ? '—' : Number(v).toFixed(d);
 const store = {
-  get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } },
-  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 };
-function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 3200); }
-
-/* ===================== Đồng hồ mô phỏng ===================== */
-const Clock = {
-  ms: (() => { const d = new Date(); d.setHours(18, 20, 0, 0); return d.getTime(); })(),
-  speed: 60,
-  date(){ return new Date(this.ms); },
-  jump(hms){ const [h,m,s] = hms.split(':').map(Number); const d = this.date(); d.setHours(h, m, s, 0); this.ms = d.getTime(); }
-};
-function isNightAt(d){
-  const now = d.getHours()*60 + d.getMinutes(), on = CFG.ON[0]*60+CFG.ON[1], off = CFG.OFF[0]*60+CFG.OFF[1];
-  return on > off ? (now >= on || now < off) : (now >= on && now < off);
+function hash(s) { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return (h >>> 0).toString(16); }
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 3400); }
+function inWindow(min, on, off) { return on > off ? (min >= on || min < off) : (min >= on && min < off); }
+function download(name, text, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type}));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+}
+const csvRow = r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');
+function copyText(txt, okMsg) {
+  (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast(okMsg), () => prompt('Chép nội dung:', txt));
 }
 
 /* =====================================================================
-   THIẾT BỊ GIẢ LẬP – logic chép từ firmware (applyRelay / readMeters / analyze)
+   3. ĐỒNG HỒ MÔ PHỎNG (chỉ dùng cho tủ giả lập)
+   ===================================================================== */
+const Clock = {
+  ms: (() => { const d = new Date(); d.setHours(18, 40, 0, 0); return d.getTime(); })(),
+  speed: 60,
+  min() { const d = new Date(this.ms); return d.getHours() * 60 + d.getMinutes(); },
+  jump(hms) { const [h, m, s] = hms.split(':').map(Number); const d = new Date(this.ms); d.setHours(h, m, s, 0); this.ms = d.getTime(); }
+};
+
+/* =====================================================================
+   4. THIẾT BỊ GIẢ LẬP – cùng logic với firmware (applyOutputs / readInputs /
+      readMeters / analyze / onMqttMessage)
    ===================================================================== */
 class SimDevice {
-  constructor(meta){
+  constructor(meta) {
     this.meta = meta; this.id = meta.id;
-    this.faults = {cut:[false,false,false], mains:false, contactorFail:false, contactorStuck:false, door:false, offline:false, meterFail:false};
+    this.f = {cut: [false, false, false], mains: false, kfail: [false, false], kstuck: [false, false], meter: false,
+              door: false, cbTrip: false, spdFail: false, local: false, offline: false};
+    this.sched = DEF_SCHED.map(s => s.slice());
     this.mode = 'auto'; this.maint = false;
-    this.relayOn = isNightAt(Clock.date());
-    this.relayTick = -1000;                         // coi như đã chạy ổn định từ trước
-    this.loaded = [this.relayOn, this.relayOn, this.relayOn];
-    this.anyLoad = this.relayOn;
-    this.ph = [0,1,2].map(() => ({v:0, i:0, p:0, ok:true}));
-    this.wh = rnd(1500, 9000) * 1000;
-    this.tilt = rnd(0.2, 1.2); this.vib = 0; this.lastCollision = -1e9;
-    this.meterFail = 0; this.alarms = {};
+    this.doState = this.sched.map((s, c) => this.schedOn(c));
+    this.remoteDo = this.doState.slice();
+    this.di = [0, 1, 0, 0, 1, 1];
     this.tick = Math.floor(Math.random() * CFG.TELE_EVERY);
-    this.queue = []; this.offTicks = 0; this.lwtSent = false;
+    this.changedTick = -1000;
+    const lit = this.doState.some(Boolean);
+    this.loaded = [lit, lit, lit]; this.anyLoad = lit;
+    this.ph = [0, 1, 2].map(() => ({v: 0, i: 0, p: 0, pf: 0, ok: true}));
+    this.freq = 50; this.wh = rnd(2000, 9000) * 1000;
+    this.tilt = rnd(0.2, 1.2); this.vib = 0; this.lastCollision = -1e9;
+    this.meterFail = 0; this.alarms = {}; this.queue = []; this.offTicks = 0; this.lwtSent = false;
   }
-  topic(leaf){ return `${App.root()}/tu/${this.id}/${leaf}`; }
-  out(leaf, obj, retain){
-    if (this.faults.offline) { if (leaf === 'alarm') this.queue.push(obj); return; }   // giữ lại, gửi bù sau
-    Bus.publish(this.topic(leaf), obj, 'sim', retain);
+  topic(leaf) { return `${App.root()}/tu/${this.id}/${leaf}`; }
+  out(leaf, obj) {
+    if (this.f.offline) { if (leaf === 'alarm') this.queue.push(obj); return; }
+    Bus.fromDevice(this.topic(leaf), typeof obj === 'string' ? obj : JSON.stringify(obj), 'sim');
   }
-  wantsOn(){ return this.mode === 'on' || (this.mode === 'auto' && isNightAt(Clock.date())); }
-  applyRelay(){
-    const w = this.wantsOn();
-    if (w !== this.relayOn){ this.relayOn = w; this.relayTick = this.tick; this.loaded = [false,false,false]; this.anyLoad = false; }
+  schedOn(c) { const s = this.sched[c]; return !!s[0] && inWindow(Clock.min(), s[1], s[2]); }
+  applyOutputs() {
+    let changed = false;
+    for (let c = 0; c < N_DO; c++) {
+      const want = this.mode === 'auto' ? this.schedOn(c) : this.remoteDo[c];
+      if (want !== this.doState[c]) { this.doState[c] = want; changed = true; }
+    }
+    if (changed) { this.changedTick = this.tick; this.loaded = [false, false, false]; this.anyLoad = false; }
   }
-  readMeters(){
-    const f = this.faults;
-    const lampsOn = (this.relayOn && !f.contactorFail) || f.contactorStuck;
-    for (let k = 0; k < 3; k++){
+  readInputs() {
+    const f = this.f;
+    this.di[DI.DOOR] = f.door ? 1 : 0;
+    this.di[DI.CB] = f.cbTrip ? 0 : 1;
+    this.di[DI.SPD] = f.spdFail ? 0 : 1;
+    this.di[DI.AUTO] = f.local ? 0 : 1;
+    for (let c = 0; c < 2; c++) this.di[FB_OF_DO[c]] = ((this.doState[c] || f.kstuck[c]) && !f.kfail[c]) ? 1 : 0;
+  }
+  readMeters() {
+    const f = this.f, powered = !f.mains && this.di[DI.CB];
+    let share = 0;
+    for (let c = 0; c < N_DO; c++) { const closed = FB_OF_DO[c] >= 0 ? this.di[FB_OF_DO[c]] : this.doState[c]; if (closed) share += SIM_SHARE[c]; }
+    for (let k = 0; k < 3; k++) {
       const p = this.ph[k];
-      if (f.meterFail){ p.ok = false; continue; }
+      if (f.meter) { p.ok = false; continue; }
       p.ok = true;
-      p.v = f.mains ? rnd(0, 3) : 225 + rnd(-2, 2);
-      p.i = (!f.mains && lampsOn && !f.cut[k]) ? this.meta.load[k] * (1 + rnd(-0.03, 0.03)) : rnd(0, 0.03);
-      p.p = p.v * p.i * 0.95;
-      this.wh += p.p * Clock.speed / 3600;          // điện năng theo giờ mô phỏng
+      p.v = powered ? 225 + rnd(-2, 2) : rnd(0, 2);
+      p.i = (powered && !f.cut[k]) ? this.meta.load[k] * share * (1 + rnd(-0.03, 0.03)) : rnd(0, 0.03);
+      p.pf = p.i > 0.1 ? 0.95 + rnd(-0.01, 0.01) : 0;
+      p.p = p.v * p.i * p.pf;
+      this.wh += p.p * Clock.speed / 3600;
     }
-    this.meterFail = f.meterFail ? this.meterFail + 1 : 0;
+    this.freq = powered ? 50 + rnd(-0.05, 0.05) : 0;
+    this.meterFail = f.meter ? this.meterFail + 1 : 0;
   }
-  send(code, phase, on, msg){
-    this.out('alarm', {id:this.id, code, phase, state:on?'on':'off', ts:Math.floor(Clock.ms/1000), msg,
-      v:this.ph.map(p => +p.v.toFixed(1)), i:this.ph.map(p => +p.i.toFixed(2))});
+  send(code, phase, on, msg) {
+    this.out('alarm', {id: this.id, code, phase, state: on ? 'on' : 'off', ts: Math.floor(Clock.ms / 1000), msg,
+      v: this.ph.map(p => +p.v.toFixed(1)), i: this.ph.map(p => +p.i.toFixed(2))});
   }
-  evalAlarm(key, code, phase, cond, need, msgOn, msgOff){
-    const a = this.alarms[key] || (this.alarms[key] = {cnt:0, active:false});
-    if (cond){ a.cnt++; if (!a.active && a.cnt >= need){ a.active = true; this.send(code, phase, true, msgOn); } }
-    else { a.cnt = 0; if (a.active){ a.active = false; this.send(code, phase, false, msgOff); } }
+  ev(key, code, phase, cond, need, msgOn, msgOff) {
+    const a = this.alarms[key] || (this.alarms[key] = {cnt: 0, active: false});
+    if (cond) { a.cnt++; if (!a.active && a.cnt >= need) { a.active = true; this.send(code, phase, true, msgOn); } }
+    else { a.cnt = 0; if (a.active) { a.active = false; this.send(code, phase, false, msgOff); } }
   }
-  analyze(){
-    const ph = this.ph, settled = this.tick - this.relayTick > CFG.RELAY_GRACE_TICKS;
-    const lost = ph.filter(p => p.ok && p.v < CFG.V_LOST).length, allLost = lost === 3;
-    this.evalAlarm('MAT_DIEN','MAT_DIEN','-', allLost, CFG.DEBOUNCE_N, 'Mất điện lưới cả 3 pha', 'Đã có điện lại');
-    for (let k = 0; k < 3; k++){
-      const P = 'ABC'[k];
-      this.evalAlarm('MAT_PHA'+P,'MAT_PHA',P, !allLost && ph[k].ok && ph[k].v < CFG.V_LOST, CFG.DEBOUNCE_N, 'Mất điện áp pha', 'Pha đã có điện áp');
-    }
+  analyze() {
+    const ph = this.ph, di = this.di, settled = this.tick - this.changedTick > CFG.GRACE_TICKS;
+    const localManual = !di[DI.AUTO], anyOn = this.doState.some(Boolean);
+    this.ev('CB_TONG', 'CB_TONG', '-', !di[DI.CB], 2, 'CB tổng bị cắt/nhảy', 'CB tổng đã đóng');
+    const allLost = ph.filter(p => p.ok && p.v < CFG.V_LOST).length === 3;
+    this.ev('MAT_DIEN', 'MAT_DIEN', '-', allLost && di[DI.CB], CFG.DEBOUNCE_N, 'Mất điện lưới cả 3 pha', 'Đã có điện lại');
+    for (let k = 0; k < 3; k++) this.ev('MAT_PHA' + k, 'MAT_PHA', 'ABC'[k], !allLost && ph[k].ok && ph[k].v < CFG.V_LOST, CFG.DEBOUNCE_N, 'Mất điện áp pha', 'Pha đã có điện áp');
     const vBad = ph.some(p => p.ok && p.v >= CFG.V_LOST && (p.v < CFG.V_MIN_OK || p.v > CFG.V_MAX_OK));
-    this.evalAlarm('DIEN_AP','DIEN_AP','-', vBad, CFG.VOLT_DEBOUNCE_N, 'Điện áp bất thường', 'Điện áp bình thường');
-
-    for (let k = 0; k < 3; k++){
-      const P = 'ABC'[k], vOk = ph[k].ok && ph[k].v >= CFG.V_MIN_OK;
-      if (this.relayOn && ph[k].ok && ph[k].i >= CFG.I_LOADED){ this.loaded[k] = true; this.anyLoad = true; }
-      const cut = this.relayOn && this.loaded[k] && vOk && ph[k].i < CFG.I_ZERO;
-      this.evalAlarm('CAT_CAP'+P,'CAT_CAP',P, cut, CFG.DEBOUNCE_N, 'Pha đang tải bị mất dòng, điện áp còn – nghi cắt/trộm cáp', 'Pha đã có dòng trở lại');
-    }
-    const iSum = ph.reduce((s,p) => s + (p.ok ? p.i : 0), 0);
+    this.ev('DIEN_AP', 'DIEN_AP', '-', vBad, CFG.VOLT_DEBOUNCE_N, 'Điện áp bất thường', 'Điện áp bình thường');
     const allVOk = ph.every(p => p.ok && p.v >= CFG.V_MIN_OK);
-    this.evalAlarm('KHONG_SANG','KHONG_SANG','-', this.relayOn && settled && allVOk && !this.anyLoad && iSum < CFG.I_ZERO*3,
-      CFG.DEBOUNCE_N, 'Đã đóng relay nhưng không có dòng – kiểm tra contactor/CB', 'Đèn đã sáng');
-    this.evalAlarm('SANG_NGAY','SANG_NGAY','-', !this.relayOn && settled && iSum >= CFG.I_LOADED,
-      CFG.DEBOUNCE_N, 'Relay đã cắt nhưng vẫn có dòng – nghi dính contactor', 'Đèn đã tắt');
-
-    if (this.vib > CFG.VIB_ALARM_G && this.tick - this.lastCollision > CFG.COLLISION_COOLDOWN_TICKS){
+    for (let c = 0; c < 2; c++) {
+      const fb = di[FB_OF_DO[c]];
+      this.ev('KD' + c, 'K_KHONG_DONG', String(c + 1), !localManual && allVOk && this.doState[c] && !fb, CFG.FB_DEBOUNCE_N, 'Đã ra lệnh đóng nhưng contactor không đóng', 'Contactor đã đóng');
+      this.ev('KC' + c, 'K_KHONG_CAT', String(c + 1), !localManual && !this.doState[c] && fb, CFG.FB_DEBOUNCE_N, 'Đã ra lệnh cắt nhưng contactor vẫn đóng', 'Contactor đã cắt');
+    }
+    for (let k = 0; k < 3; k++) {
+      const vOk = ph[k].ok && ph[k].v >= CFG.V_MIN_OK;
+      if (anyOn && ph[k].ok && ph[k].i >= CFG.I_LOADED) { this.loaded[k] = true; this.anyLoad = true; }
+      this.ev('CAT' + k, 'CAT_CAP', 'ABC'[k], anyOn && this.loaded[k] && vOk && ph[k].i < CFG.I_ZERO, CFG.DEBOUNCE_N, 'Pha đang tải bị mất dòng, điện áp còn – nghi cắt/trộm cáp', 'Pha đã có dòng trở lại');
+    }
+    const iSum = ph.reduce((s, p) => s + (p.ok ? p.i : 0), 0);
+    const fbOk = !this.alarms.KD0?.active && !this.alarms.KD1?.active;
+    this.ev('KHONG_SANG', 'KHONG_SANG', '-', anyOn && settled && allVOk && fbOk && !this.anyLoad && iSum < CFG.I_ZERO * 3, CFG.DEBOUNCE_N, 'Contactor đã đóng nhưng không có dòng', 'Đèn đã sáng');
+    this.ev('SANG_NGAY', 'SANG_NGAY', '-', !anyOn && !localManual && settled && iSum >= CFG.I_LOADED, CFG.DEBOUNCE_N, 'Tất cả kênh đã cắt nhưng vẫn có dòng', 'Đèn đã tắt');
+    this.ev('SPD', 'SPD', '-', !di[DI.SPD], 2, 'Thiết bị chống sét hỏng', 'Chống sét bình thường');
+    this.ev('CHE_DO_TAY', 'CHE_DO_TAY', '-', localManual, 2, 'Tủ đang ở chế độ Tay tại chỗ', 'Tủ đã về Tự động');
+    this.ev('MO_CUA', 'MO_CUA', '-', di[DI.DOOR] && !this.maint, 2, 'Cửa tủ bị mở ngoài giờ bảo trì', 'Cửa tủ đã đóng');
+    this.ev('LOI_DONG_HO', 'LOI_DONG_HO', '-', this.meterFail >= 5, 1, 'Không đọc được đồng hồ RS485', 'Đồng hồ đã phản hồi');
+    if (this.vib > CFG.VIB_ALARM_G && this.tick - this.lastCollision > CFG.COLLISION_COOLDOWN_TICKS) {
       this.lastCollision = this.tick;
-      this.send('VA_CHAM','-', true, `Rung động mạnh ${this.vib.toFixed(2)}g – nghi xe va chạm`);
+      this.send('VA_CHAM', '-', true, `Rung động mạnh ${this.vib.toFixed(2)}g – nghi xe va chạm`);
     }
     this.vib = 0;
-    this.evalAlarm('NGHIENG','NGHIENG','-', this.tilt > CFG.TILT_ALARM, CFG.DEBOUNCE_N, 'Tủ/trụ bị nghiêng', 'Đã hết nghiêng');
-    this.evalAlarm('MO_CUA','MO_CUA','-', this.faults.door && !this.maint, 2, 'Cửa tủ bị mở ngoài giờ bảo trì', 'Cửa tủ đã đóng');
-    this.evalAlarm('LOI_DONG_HO','LOI_DONG_HO','-', this.meterFail >= 5, 1, 'Không đọc được đồng hồ điện RS485', 'Đồng hồ đã phản hồi');
+    this.ev('NGHIENG', 'NGHIENG', '-', this.tilt > CFG.TILT_ALARM, CFG.DEBOUNCE_N, 'Tủ/trụ bị nghiêng', 'Đã hết nghiêng');
   }
-  telemetry(){
-    const ph = this.ph;
-    this.out('telemetry', {id:this.id, ts:Math.floor(Clock.ms/1000),
-      p:Math.round(ph.reduce((s,p) => s + (p.ok ? p.p : 0), 0)), kwh:+(this.wh/1000).toFixed(2),
-      relay:this.relayOn?1:0, mode:this.mode, maint:this.maint?1:0, door:this.faults.door?1:0,
-      tilt:+this.tilt.toFixed(1), rssi:Math.round(rnd(-78,-55)), q:this.queue.length,
-      v:ph.map(p => p.ok ? +p.v.toFixed(1) : null), i:ph.map(p => p.ok ? +p.i.toFixed(2) : null)});
+  telemetry() {
+    const ph = this.ph, ok = p => p.ok;
+    this.out('telemetry', {id: this.id, ts: Math.floor(Clock.ms / 1000), f: +this.freq.toFixed(2), kwh: +(this.wh / 1000).toFixed(2),
+      mode: this.mode, maint: this.maint ? 1 : 0, tilt: +this.tilt.toFixed(1), rssi: Math.round(rnd(-78, -55)), q: this.queue.length, sd: 1,
+      v: ph.map(p => ok(p) ? +p.v.toFixed(1) : null), i: ph.map(p => ok(p) ? +p.i.toFixed(2) : null),
+      p: ph.map(p => ok(p) ? +p.p.toFixed(1) : null), pf: ph.map(p => ok(p) ? +p.pf.toFixed(2) : null),
+      di: this.di.slice(), do: this.doState.map(Number), sch: this.sched.map(s => s.slice())});
   }
-  step(){
+  step() {
     this.tick++;
-    this.applyRelay(); this.readMeters(); this.analyze();
-    if (this.faults.offline){
-      this.offTicks++;
-      if (this.offTicks === CFG.LWT_AFTER && !this.lwtSent){ this.lwtSent = true; Bus.publish(this.topic('status'), 'offline', 'sim', true); }
+    this.readInputs(); this.applyOutputs(); this.readMeters(); this.analyze();
+    if (this.f.offline) {
+      if (++this.offTicks === CFG.LWT_AFTER && !this.lwtSent) { this.lwtSent = true; Bus.fromDevice(this.topic('status'), 'offline', 'sim'); }
     } else if (this.tick % CFG.TELE_EVERY === 0) this.telemetry();
   }
-  setOffline(on){
-    this.faults.offline = on;
-    if (!on){                                       // có mạng lại: online + gửi bù hàng đợi
+  setOffline(on) {
+    this.f.offline = on;
+    if (!on) {
       this.offTicks = 0; this.lwtSent = false;
-      Bus.publish(this.topic('status'), 'online', 'sim', true);
+      Bus.fromDevice(this.topic('status'), 'online', 'sim');
       const q = this.queue; this.queue = [];
-      q.forEach(m => Bus.publish(this.topic('alarm'), m, 'sim'));
+      q.forEach(m => this.out('alarm', m));
       this.telemetry();
     }
   }
-  onCmd(cmd){
-    if (['on','off','auto'].includes(cmd)) this.mode = cmd;
-    if (cmd === 'maint_on') this.maint = true;
-    if (cmd === 'maint_off') this.maint = false;
-    this.applyRelay(); this.telemetry();
+  // Cú pháp lệnh giống firmware: "<ref> <lệnh> <tham số>"
+  onCmd(text) {
+    if (this.f.offline) return;                  // mất mạng: lệnh không tới được tủ
+    const m = text.trim().split(/\s+/), ref = +m[0], cmd = m[1], a = m.slice(2);
+    let ok = true, msg = 'OK';
+    const remoteCmd = ['do', 'all', 'mode'].includes(cmd);
+    if (remoteCmd && !this.di[DI.AUTO]) { ok = false; msg = 'Tu dang o che do Tay tai cho'; }
+    else if (cmd === 'do' || cmd === 'all') {
+      const all = cmd === 'all', ch = all ? 0 : +a[0], val = +(all ? a[0] : a[1]);
+      if ((!all && !(ch >= 1 && ch <= N_DO)) || Number.isNaN(val)) { ok = false; msg = 'Tham so sai'; }
+      else {
+        if (this.mode === 'auto') this.remoteDo = this.doState.slice();
+        this.mode = 'remote';
+        if (all) this.remoteDo = this.remoteDo.map(() => !!val); else this.remoteDo[ch - 1] = !!val;
+      }
+    } else if (cmd === 'mode') {
+      if (a[0] === 'auto') this.mode = 'auto';
+      else if (a[0] === 'remote') { this.remoteDo = this.doState.slice(); this.mode = 'remote'; }
+      else { ok = false; msg = 'Che do sai'; }
+    } else if (cmd === 'sched') {
+      const t = /^\d{1,2}:\d{2}$/, ch = +a[0], en = +a[1];
+      const on = t.test(a[2] || '') ? toMin(a[2]) : NaN, off = t.test(a[3] || '') ? toMin(a[3]) : NaN;
+      if (ch >= 1 && ch <= N_DO && on >= 0 && on < 1440 && off >= 0 && off < 1440) this.sched[ch - 1] = [en ? 1 : 0, on, off];
+      else { ok = false; msg = 'Lich sai'; }
+    } else if (cmd === 'maint') this.maint = +a[0] !== 0;
+    else if (cmd === 'status') { /* chỉ gửi lại số liệu */ }
+    else if (cmd === 'sim') applySimFault(this, a[0], +a[1]);
+    else { ok = false; msg = 'Lenh khong ho tro'; }
+    this.readInputs(); this.applyOutputs();
+    this.out('ack', {id: this.id, ref, ok: ok ? 1 : 0, msg});
+    this.telemetry();
   }
 }
 
-/* ===================== Bus: thay cho broker MQTT ===================== */
+/* =====================================================================
+   5. BUS – thay cho broker MQTT khi chạy demo; ghi bản tin ra console
+   ===================================================================== */
 const Bus = {
-  lines: [],
-  publish(topic, payload, source, retain){
-    const text = typeof payload === 'string' ? payload : JSON.stringify(payload);
-    this.log(topic, text);
-    App.onMessage(topic, text, source);
-  },
-  log(topic, text){
-    const leaf = topic.split('/').pop(), cls = leaf === 'alarm' ? 'a' : (leaf === 'status' || leaf === 'cmd') ? 's' : '';
-    this.lines.push(`<span class="t">${esc(topic)}</span> <span class="${cls}">${esc(text)}</span>`);
-    if (this.lines.length > 150) this.lines.shift();
+  lines: [], dirty: false,
+  fromDevice(topic, text, source) { this.log(topic, text); App.onMessage(topic, text, source); },
+  log(topic, text) {
+    const leaf = topic.split('/').pop();
+    const cls = {alarm: 'a', status: 's', cmd: 'c', ack: 's'}[leaf] || '';
+    this.lines.push(`<span class="t">${esc(fmtClock(Date.now()))} ${esc(topic)}</span> <span class="${cls}">${esc(text)}</span>`);
+    if (this.lines.length > 200) this.lines.shift();
     this.dirty = true;
   },
-  flush(){
-    if (!this.dirty) return; this.dirty = false;
-    const c = $('#console'); const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 30;
+  flush() {
+    const c = $('#console'); if (!c || !this.dirty) return; this.dirty = false;
+    const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 30;
     c.innerHTML = this.lines.join('\n');
     if (atBottom) c.scrollTop = c.scrollHeight;
   }
 };
 
 /* =====================================================================
-   APP GIÁM SÁT
+   6. TRẠNG THÁI APP
    ===================================================================== */
+const DEF_SETTINGS = {demo: true, teams: ['Tổ 1', 'Tổ 2', 'Tổ 3', 'Tổ trực đêm'], pinHash: '',
+  mq: {url: 'wss://broker.hivemq.com:8884/mqtt', root: 'cs/demo-doi-cs', user: '', pass: '', auto: false}};
+const savedSettings = store.get('gst.settings', {});
 const App = {
-  cabs: {}, devices: {}, incidents: [], seq: 0, filter: 'open', openKey: null,
-  random: false, sound: false, mq: null, incDirty: true,
-  root(){ return ($('#mqRoot').value || 'cs/demo').trim(); },
+  settings: Object.assign({}, DEF_SETTINGS, savedSettings, {mq: Object.assign({}, DEF_SETTINGS.mq, savedSettings.mq || {})}),
+  cabCfg: store.get('gst.cabs', null),
+  incidents: store.get('gst.inc', []),
+  seq: store.get('gst.seq', 0),
+  energy: store.get('gst.energy', {}),
+  cabs: {}, devices: {}, pending: {}, sel: new Set(), area: '', incFilter: 'open', incDirty: true, bulkCh: 'all',
+  mq: null, mqState: 'off', unlockedUntil: 0, random: false, randomTimer: 0, simCab: 'TU-001', sound: false,
 
-  init(){
-    const saved = store.get('gstu.v1', null);
-    if (saved){ this.incidents = saved.incidents || []; this.seq = saved.seq || 0; }
-    SAMPLE.forEach(m => {
-      this.devices[m.id] = new SimDevice(m);
-      this.ensureCab('sim', m.id, m);
-    });
-    Object.values(this.devices).forEach(d => d.telemetry());
-  },
-  save(){ store.set('gstu.v1', {incidents: this.incidents.slice(-500), seq: this.seq}); },
+  root() { return (this.settings.mq.root || 'cs/demo').trim(); },
+  saveSettings() { store.set('gst.settings', this.settings); },
+  saveCabs() { store.set('gst.cabs', this.cabCfg); },
+  saveInc() { store.set('gst.inc', this.incidents.slice(-800)); store.set('gst.seq', this.seq); },
+  saveEnergy() { store.set('gst.energy', this.energy); },
 
-  ensureCab(source, id, meta){
-    const key = source + ':' + id;
-    if (!this.cabs[key]){
-      const m = meta || {name: source === 'mqtt' ? 'Thiết bị thật / Wokwi' : id, area: '—', team: TEAMS[0]};
-      this.cabs[key] = {key, id, source, name:m.name, area:m.area, team:m.team, tele:null, lastSeen:Date.now(), online:true, hist:[], active:{}};
+  init() {
+    if (!Array.isArray(this.cabCfg)) {
+      this.cabCfg = SAMPLE.map(m => ({key: 'sim:' + m.id, id: m.id, source: 'sim', name: m.name, area: m.area, team: m.team,
+        doNames: DEF_DO.slice(), diNames: DEF_DI.slice()}));
+      this.saveCabs();
     }
-    return this.cabs[key];
+    this.cabCfg.forEach(cfg => this.addRuntime(cfg));
+    SAMPLE.forEach(m => { this.devices[m.id] = new SimDevice(m); });
+    if (this.settings.demo) Object.values(this.devices).forEach(d => { d.readInputs(); d.readMeters(); d.telemetry(); });
   },
-  nowFor(cab){ return cab.source === 'sim' ? Clock.ms : Date.now(); },
+  addRuntime(cfg) {
+    this.cabs[cfg.key] = {cfg, tele: null, online: true, lastSeen: Date.now(), hist: [], active: {}, log: []};
+    return this.cabs[cfg.key];
+  },
+  visibleCabs() { return Object.values(this.cabs).filter(c => c.cfg.source !== 'sim' || this.settings.demo); },
+  ensureCab(source, id) {
+    const key = source + ':' + id;
+    if (this.cabs[key]) return this.cabs[key];
+    const cfg = {key, id, source, name: 'Tủ ' + id, area: 'Chưa phân khu', team: this.settings.teams[0] || 'Tổ 1', doNames: DEF_DO.slice(), diNames: DEF_DI.slice()};
+    this.cabCfg.push(cfg); this.saveCabs();
+    return this.addRuntime(cfg);
+  },
+  nowFor(cab) { return cab && cab.cfg.source === 'sim' ? Clock.ms : Date.now(); },
+  addLog(cab, s, t) { cab.log.unshift({t: t || this.nowFor(cab), s}); if (cab.log.length > 200) cab.log.pop(); },
 
-  onMessage(topic, text, source){
+  /* ---------- Bản tin từ thiết bị ---------- */
+  onMessage(topic, text, source) {
     const parts = topic.split('/'); if (parts.length < 3) return;
     const leaf = parts.pop(), id = parts.pop();
+    if (source === 'sim' && !this.settings.demo) return;
     const cab = this.ensureCab(source, id);
-    if (leaf === 'status'){
-      if (text === 'offline') this.markOffline(cab, 'Broker báo thiết bị mất kết nối (LWT)');
-      else this.markOnline(cab);
-      return;
-    }
-    let m; try { m = JSON.parse(text); } catch(e){ return; }
+    if (leaf === 'status') { if (text === 'offline') this.markOffline(cab, 'Broker báo thiết bị mất kết nối'); else this.markOnline(cab); return; }
+    if (leaf === 'cmd') { if (!this.pending[text.split(' ')[0]]) this.addLog(cab, `Lệnh từ thiết bị khác: ${text}`); return; }
+    let m; try { m = JSON.parse(text); } catch (e) { return; }
     cab.lastSeen = Date.now();
     if (!cab.online) this.markOnline(cab);
-    if (leaf === 'telemetry'){
-      cab.tele = m;
-      cab.hist.push(m.i || [0,0,0]); if (cab.hist.length > 60) cab.hist.shift();
-    } else if (leaf === 'alarm') this.onAlarm(cab, m);
+    if (leaf === 'telemetry') this.onTelemetry(cab, m);
+    else if (leaf === 'alarm') this.onAlarm(cab, m);
+    else if (leaf === 'ack') this.onAck(cab, m);
   },
+  onTelemetry(cab, m) {
+    cab.tele = m;
+    const t = m.ts ? m.ts * 1000 : this.nowFor(cab);
+    cab.hist.push({t, v: m.v || [], i: m.i || [], p: (m.p || []).reduce((s, x) => s + (x || 0), 0)});
+    if (cab.hist.length > CFG.HIST) cab.hist.shift();
+    if (typeof m.kwh === 'number') {
+      const e = this.energy[cab.cfg.key] || (this.energy[cab.cfg.key] = {});
+      if (!Object.keys(e).length && cab.cfg.source === 'sim') seedEnergy(e, m.kwh, cab, t);
+      const d = dayKey(t);
+      if (!e[d]) e[d] = [m.kwh, m.kwh]; else e[d][1] = m.kwh;
+      this.energyDirty = true;
+    }
+  },
+  markOffline(cab, why) { if (!cab.online) return; cab.online = false; this.onAlarm(cab, {code: 'MAT_KET_NOI', phase: '-', state: 'on', msg: why, ts: 0}); },
+  markOnline(cab) { if (cab.online) return; cab.online = true; cab.lastSeen = Date.now(); this.onAlarm(cab, {code: 'MAT_KET_NOI', phase: '-', state: 'off', msg: 'Thiết bị kết nối lại', ts: 0}); },
 
-  markOffline(cab, why){
-    if (!cab.online) return; cab.online = false;
-    this.onAlarm(cab, {code:'MAT_KET_NOI', phase:'-', state:'on', msg:why, ts:0});
-  },
-  markOnline(cab){
-    if (cab.online) return; cab.online = true; cab.lastSeen = Date.now();
-    this.onAlarm(cab, {code:'MAT_KET_NOI', phase:'-', state:'off', msg:'Thiết bị kết nối lại', ts:0});
-  },
-
-  onAlarm(cab, m){
+  onAlarm(cab, m) {
     const info = ALARM[m.code]; if (!info) return;
     const at = m.ts ? m.ts * 1000 : this.nowFor(cab);
     const phase = m.phase && m.phase !== '-' ? m.phase : null;
     const akey = m.code + (phase || '');
-    if (m.state === 'on') cab.active[akey] = m.code === 'VA_CHAM' ? {...m, exp: Date.now() + 60000} : m;   // sự kiện tức thời: hiện 60 s
+    if (m.state === 'on') cab.active[akey] = m.code === 'VA_CHAM' ? {...m, exp: Date.now() + 60000} : m;
     else delete cab.active[akey];
-
-    // Gộp: cùng tủ + cùng loại + chưa xong -> 1 sự cố (pha A, B, C gộp chung)
-    let inc = this.incidents.find(x => x.cab === cab.key && x.code === m.code && x.status !== 'done');
-    if (m.state === 'on'){
-      const iTxt = m.i && phase ? ` (I=${m.i['ABC'.indexOf(phase)]} A, U=${m.v['ABC'.indexOf(phase)]} V)` : '';
-      if (inc){
+    this.addLog(cab, `${m.state === 'on' ? '⚠️' : '✅'} ${info.label}${phase ? ' ' + phaseLabel(m.code, phase) : ''}: ${m.msg}`, at);
+    let inc = this.incidents.find(x => x.cab === cab.cfg.key && x.code === m.code && x.status !== 'done');
+    const iTxt = m.i && /^[ABC]$/.test(phase || '') ? ` (I=${m.i['ABC'.indexOf(phase)]} A, U=${m.v['ABC'.indexOf(phase)]} V)` : '';
+    if (m.state === 'on') {
+      if (inc) {
         inc.count++; inc.cleared = false;
         if (phase && !inc.phases.includes(phase)) inc.phases.push(phase);
         if (phase && !inc.activePh.includes(phase)) inc.activePh.push(phase);
-        inc.log.push({t: at, s: `Thiết bị báo lại${phase ? ' pha ' + phase : ''}${iTxt}`});
+        inc.log.push({t: at, s: `Thiết bị báo lại${phase ? ' ' + phaseLabel(m.code, phase) : ''}${iTxt}`});
       } else {
-        inc = {no: 'SC-' + String(++this.seq).padStart(4, '0'), cab: cab.key, tu: cab.id, name: cab.name, area: cab.area,
-          code: m.code, phases: phase ? [phase] : [], activePh: phase ? [phase] : [], msg: m.msg, at, status: 'new',
-          team: cab.team, note: '', count: 1, cleared: false, src: cab.source,
-          log: [{t: at, s: `Phát hiện: ${m.msg}${iTxt}`}]};
+        inc = {no: 'SC-' + String(++this.seq).padStart(4, '0'), cab: cab.cfg.key, tu: cab.cfg.id, name: cab.cfg.name, area: cab.cfg.area,
+          code: m.code, phases: phase ? [phase] : [], activePh: phase ? [phase] : [], at, status: 'new', team: cab.cfg.team,
+          note: '', count: 1, cleared: false, log: [{t: at, s: `Phát hiện: ${m.msg}${iTxt}`}]};
         this.incidents.push(inc);
-        toast(`${info.icon} ${cab.id}: ${info.label}${phase ? ' – pha ' + phase : ''}`);
+        toast(`${info.icon} ${cab.cfg.id}: ${info.label}${phase ? ' – ' + phaseLabel(m.code, phase) : ''}`);
         if (info.sev >= 3) this.alert();
       }
-    } else if (inc){
+    } else if (inc) {
       if (phase) inc.activePh = inc.activePh.filter(p => p !== phase);
-      if (!phase || inc.activePh.length === 0){
-        inc.cleared = true;
-        inc.log.push({t: at, s: `Thiết bị báo đã hết: ${m.msg}`});
-      }
+      if (!phase || !inc.activePh.length) { inc.cleared = true; inc.log.push({t: at, s: `Thiết bị báo đã hết: ${m.msg}`}); }
     }
-    this.save(); this.incDirty = true;
+    this.saveInc(); this.incDirty = true;
   },
-
-  alert(){
-    try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch(e){}
+  onAck(cab, m) {
+    const p = this.pending[m.ref]; if (!p || p.key !== cab.cfg.key) return;
+    clearTimeout(p.timer); delete this.pending[m.ref];
+    const msg = ACK_MSG[m.msg] || m.msg;
+    this.addLog(cab, `${m.ok ? '✔' : '✖'} ${p.label} – ${msg}`);
+    p.resolve({ok: !!m.ok, msg});
+  },
+  alert() {
+    try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {}
     if (!this.sound || !this.ac) return;
-    try {
-      const o = this.ac.createOscillator(), g = this.ac.createGain();
-      o.frequency.value = 880; g.gain.value = 0.15; o.connect(g); g.connect(this.ac.destination);
-      o.start(); o.stop(this.ac.currentTime + 0.35);
-    } catch(e){}
+    try { const o = this.ac.createOscillator(), g = this.ac.createGain(); o.frequency.value = 880; g.gain.value = 0.15; o.connect(g); g.connect(this.ac.destination); o.start(); o.stop(this.ac.currentTime + 0.35); } catch (e) {}
   },
 
-  cabState(cab){
+  /* ---------- Gửi lệnh: chờ tủ xác nhận (ack) hoặc hết giờ ---------- */
+  send(cab, body, label) {
+    const ref = String(Date.now() % 1e9 + Math.floor(Math.random() * 1000));
+    const text = `${ref} ${body}`, topic = `${this.root()}/tu/${cab.cfg.id}/cmd`;
+    return new Promise(resolve => {
+      if (cab.cfg.source === 'mqtt' && !(this.mq && this.mq.connected)) { resolve({ok: false, msg: 'App chưa kết nối broker'}); return; }
+      this.pending[ref] = {key: cab.cfg.key, label, resolve, timer: setTimeout(() => {
+        delete this.pending[ref];
+        this.addLog(cab, `✖ ${label} – tủ không phản hồi`);
+        resolve({ok: false, msg: 'Tủ không phản hồi (mất kết nối?)'});
+      }, CFG.CMD_TIMEOUT_MS)};
+      this.addLog(cab, `➜ Gửi lệnh: ${label}`);
+      Bus.log(topic, text);
+      if (cab.cfg.source === 'sim') setTimeout(() => this.devices[cab.cfg.id].onCmd(text), 250 + Math.random() * 300);
+      else this.mq.publish(topic, text, {qos: 1});
+    });
+  },
+  pendingFor(key, match) { return Object.values(this.pending).some(p => p.key === key && (!match || p.label.includes(match))); },
+
+  cabState(cab) {
     if (!cab.online) return 'off';
-    const codes = Object.values(cab.active).map(a => ALARM[a.code]?.sev || 1);
-    if (!codes.length) return 'ok';
-    return Math.max(...codes) >= 3 ? 'bad' : 'warn';
-  },
+    const sev = Object.values(cab.active).map(a => ALARM[a.code]?.sev || 1);
+    if (!sev.length) return 'ok';
+    return Math.max(...sev) >= 3 ? 'bad' : 'warn';
+  }
+};
 
-  sendCmd(cab, cmd){
-    const topic = `${this.root()}/tu/${cab.id}/cmd`;
-    if (cab.source === 'sim'){ Bus.log(topic, cmd); this.devices[cab.id].onCmd(cmd); }
-    else if (this.mq && this.mq.connected){ this.mq.publish(topic, cmd); Bus.log(topic, cmd); }
-    else { toast('Chưa kết nối broker'); return; }
-    toast(`Đã gửi lệnh "${cmd}" tới ${cab.id}`);
-  },
+function phaseLabel(code, ph) { return code.startsWith('K_') ? 'K' + ph : 'pha ' + ph; }
+function modeInfo(t) {
+  if (!t) return {txt: 'Chưa có dữ liệu', cls: ''};
+  if (t.di && t.di[DI.AUTO] === 0) return {txt: '✋ Tay tại chỗ', cls: 'warn'};
+  return t.mode === 'remote' ? {txt: '📱 Điều khiển từ xa', cls: 'acc'} : {txt: '🕒 Tự động theo lịch', cls: 'ok'};
+}
+function seedEnergy(e, kwhNow, cab, t) {            // dữ liệu mẫu 30 ngày trước cho tủ demo
+  const load = (App.devices[cab.cfg.id]?.meta.load || [3, 3, 3]).reduce((a, b) => a + b, 0);
+  const daily = load * 0.225 * 0.95 * (0.6 * 11.5 + 0.3 * 5 + 0.1 * 3.5);
+  const hrs = new Date(t).getHours() + new Date(t).getMinutes() / 60;
+  // phần đã dùng từ 0h: rạng sáng (đến 5:30) ~ 45% điện năng ngày, tối (từ 18:00) phần còn lại
+  const usedToday = daily * (Math.min(hrs, 5.5) / 5.5 * 0.45 + (hrs >= 18 ? (hrs - 18) / 6 * 0.55 : 0));
+  e[dayKey(t)] = [+(kwhNow - usedToday).toFixed(2), kwhNow];
+  let end = kwhNow - usedToday;
+  for (let d = 1; d <= 30; d++) {
+    const k = dayKey(t - d * 86400000), used = daily * rnd(0.9, 1.08);
+    e[k] = [+(end - used).toFixed(2), +end.toFixed(2)]; end -= used;
+  }
+}
+function energyStats(key, nowMs) {
+  const e = App.energy[key] || {}, today = dayKey(nowMs), month = today.slice(0, 7);
+  const used = k => e[k] ? Math.max(0, e[k][1] - e[k][0]) : 0;
+  const days = [];
+  for (let d = 13; d >= 0; d--) { const k = dayKey(nowMs - d * 86400000); days.push({k, v: used(k)}); }
+  const monthSum = Object.keys(e).filter(k => k.startsWith(month)).reduce((s, k) => s + used(k), 0);
+  const past = days.slice(0, -1).filter(d => d.v > 0);
+  return {today: used(today), month: monthSum, days, avg: past.length ? past.reduce((s, d) => s + d.v, 0) / past.length : 0};
+}
 
-  /* ---------- Hiển thị ---------- */
-  renderCabs(){
-    const cabs = Object.values(this.cabs);
-    const st = cabs.map(c => this.cabState(c));
-    $('#cTotal').textContent = cabs.length;
-    $('#cOk').textContent = st.filter(s => s === 'ok').length;
-    $('#cBad').textContent = st.filter(s => s === 'bad' || s === 'warn').length;
-    $('#cOff').textContent = st.filter(s => s === 'off').length;
-    const order = {bad:0, warn:1, off:2, ok:3};
-    cabs.sort((a, b) => order[this.cabState(a)] - order[this.cabState(b)] || a.id.localeCompare(b.id));
-    $('#cabList').innerHTML = cabs.map(c => {
-      const s = this.cabState(c), t = c.tele || {};
-      const pill = {ok:'<span class="pill ok">Bình thường</span>', warn:'<span class="pill warn">Cảnh báo</span>',
-                    bad:'<span class="pill bad">Sự cố</span>', off:'<span class="pill">Mất kết nối</span>'}[s];
-      const maxI = Math.max(...(this.devices[c.id]?.meta.load || [6,6,6])) * 1.3 || 6;
-      const phs = [0,1,2].map(k => {
-        const i = t.i ? t.i[k] : null, z = t.relay && i !== null && i < CFG.I_ZERO;
-        const w = i === null ? 0 : Math.min(100, i / maxI * 100);
-        return `<div class="ph${z ? ' zero' : ''}"><i style="color:var(--p${'abc'[k]})">${'ABC'[k]}</i>${i === null ? '—' : i.toFixed(1) + ' A'}
-          <div class="bar"><div style="width:${w}%;background:var(--p${'abc'[k]})"></div></div></div>`;
-      }).join('');
-      const al = Object.values(c.active).map(a => `<span class="pill ${ALARM[a.code].sev >= 3 ? 'bad' : 'warn'}">${ALARM[a.code].icon} ${esc(ALARM[a.code].label)}${a.phase && a.phase !== '-' ? ' ' + a.phase : ''}</span>`).join('');
-      const ago = Math.round((Date.now() - c.lastSeen) / 1000);
-      return `<div class="card cab s-${s}" data-key="${esc(c.key)}">
-        <div class="row"><div class="grow"><span class="cid">${esc(c.id)}</span> · ${esc(c.name)}
-          <div class="sub">${esc(c.area)} · ${t.relay ? '💡 Đang sáng' : '⚫ Đang tắt'}${t.mode && t.mode !== 'auto' ? ' (cưỡng bức)' : ''}${t.maint ? ' · 🔧 Bảo trì' : ''} · ${ago < 5 ? 'vừa cập nhật' : ago + ' giây trước'}</div></div>
-          ${c.source === 'mqtt' ? '<span class="pill src">Thật</span>' : ''}${pill}</div>
-        <div class="phases">${phs}</div>
-        ${al ? `<div class="alarms">${al}</div>` : ''}
-      </div>`;
-    }).join('');
-  },
+/* =====================================================================
+   7. HỘP XÁC NHẬN + MÃ PIN
+   ===================================================================== */
+function openModal(html) { $('#modal').innerHTML = html; $('#modal').classList.add('on'); $('#modalBg').classList.add('on'); }
+function closeModal() { $('#modal').classList.remove('on'); $('#modalBg').classList.remove('on'); if (closeModal.cb) { const cb = closeModal.cb; closeModal.cb = null; cb(); } }
+$('#modalBg').onclick = closeModal;
+function confirmAction(title, body, okLabel = 'Thực hiện') {
+  const needPin = App.settings.pinHash && Date.now() > App.unlockedUntil;
+  return new Promise(resolve => {
+    openModal(`<h2>${esc(title)}</h2><div class="sub" style="font-size:14px">${body}</div>
+      ${needPin ? '<div class="field" style="margin-top:12px"><label for="pinIn">Mã PIN điều khiển</label><input id="pinIn" class="in" type="password" inputmode="numeric" autocomplete="off"></div>' : ''}
+      <div class="btns"><button class="btn" id="mNo">Huỷ</button><button class="btn pri" id="mYes">${esc(okLabel)}</button></div>`);
+    closeModal.cb = () => resolve(false);
+    const pinIn = $('#pinIn'); if (pinIn) pinIn.focus();
+    $('#mNo').onclick = closeModal;
+    $('#mYes').onclick = () => {
+      if (needPin) {
+        if (hash(pinIn.value) !== App.settings.pinHash) { toast('Sai mã PIN'); pinIn.value = ''; return; }
+        App.unlockedUntil = Date.now() + CFG.PIN_UNLOCK_MS;
+      }
+      closeModal.cb = null; closeModal(); resolve(true);
+    };
+  });
+}
 
-  renderIncs(){
-    const f = this.filter;
-    const list = this.incidents.filter(x => f === 'all' || (f === 'open' ? x.status !== 'done' : x.status === f))
-      .sort((a, b) => (a.status === 'done') - (b.status === 'done') || ALARM[b.code].sev - ALARM[a.code].sev || b.at - a.at);
-    const open = this.incidents.filter(x => x.status === 'new').length;
-    const bd = $('#incBadge'); bd.hidden = !open; bd.textContent = open;
-    const openLogs = new Set([...document.querySelectorAll('#incList details[open]')].map(d => d.closest('.inc').dataset.no));
-    if (!list.length){ $('#incList').innerHTML = '<div class="empty">Không có sự cố nào ở mục này.<br>Sang tab 🧪 Giả lập để tạo thử.</div>'; return; }
-    $('#incList').innerHTML = list.map(x => {
-      const info = ALARM[x.code], sevCls = info.sev >= 3 ? 'bad' : info.sev === 2 ? 'warn' : 'off';
+/* =====================================================================
+   8. HÀNH ĐỘNG ĐIỀU KHIỂN
+   ===================================================================== */
+const okIcon = r => r.ok ? '✔' : '✖';
+async function cmdDo(key, ch, val) {
+  const cab = App.cabs[key], name = cab.cfg.doNames[ch - 1];
+  const t = cab.tele, note = t && t.mode === 'auto' ? '<br><br>Tủ sẽ chuyển sang <b>Điều khiển từ xa</b> và giữ nguyên theo lệnh. Bấm "Về tự động" để chạy lại theo lịch.' : '';
+  if (!await confirmAction(`${val ? 'Bật' : 'Tắt'} ${name}?`, `Tủ <b>${esc(cab.cfg.id)}</b> – ${esc(cab.cfg.name)}${note}`, val ? 'Bật' : 'Tắt')) return;
+  const p = App.send(cab, `do ${ch} ${val}`, `${val ? 'Bật' : 'Tắt'} ${name}`); render(true);
+  const r = await p;
+  toast(`${okIcon(r)} ${cab.cfg.id}: ${val ? 'Bật' : 'Tắt'} ${name} – ${r.msg}`); render(true);
+}
+async function cmdSimple(key, body, label, ask) {
+  const cab = App.cabs[key];
+  if (ask && !await confirmAction(label + '?', `Tủ <b>${esc(cab.cfg.id)}</b> – ${esc(cab.cfg.name)}`)) return;
+  const r = await App.send(cab, body, label);
+  toast(`${okIcon(r)} ${cab.cfg.id}: ${label} – ${r.msg}`); render(true);
+}
+async function cmdBulk(keys, ch, action) {
+  if (!keys.length) { toast('Chưa chọn tủ nào'); return; }
+  const chName = ch === 'all' ? 'tất cả kênh' : DEF_DO[ch - 1];
+  const label = action === 'auto' ? 'Về tự động theo lịch' : `${action === '1' ? 'Bật' : 'Tắt'} ${chName}`;
+  if (!await confirmAction(`${label} cho ${keys.length} tủ?`, keys.map(k => esc(App.cabs[k].cfg.id)).join(', '))) return;
+  toast(`Đang gửi lệnh tới ${keys.length} tủ…`);
+  const body = action === 'auto' ? 'mode auto' : ch === 'all' ? `all ${action}` : `do ${ch} ${action}`;
+  const res = await Promise.all(keys.map(k => App.send(App.cabs[k], body, label).then(r => ({k, ...r}))));
+  const fail = res.filter(r => !r.ok);
+  toast(`${label}: ${res.length - fail.length}/${res.length} tủ đã thực hiện${fail.length ? ' · không được: ' + fail.map(f => App.cabs[f.k].cfg.id).join(', ') : ''}`);
+  render(true);
+}
+function schedRows() {
+  return [1, 2, 3, 4].map(ch => {
+    const row = document.querySelector(`[data-sched-row="${ch}"]`);
+    return {ch, en: row.querySelector('.s-en').checked ? 1 : 0, on: row.querySelector('.s-on').value, off: row.querySelector('.s-off').value};
+  });
+}
+async function cmdSched(key, ch) {
+  const cab = App.cabs[key], r0 = schedRows()[ch - 1];
+  if (!r0.on || !r0.off) { toast('Nhập đủ giờ bật và giờ tắt'); return; }
+  const r = await App.send(cab, `sched ${ch} ${r0.en} ${r0.on} ${r0.off}`, `Lịch ${cab.cfg.doNames[ch - 1]}: ${r0.en ? r0.on + ' → ' + r0.off : 'tắt lịch'}`);
+  toast(`${okIcon(r)} ${cab.cfg.id}: lưu lịch K${ch} – ${r.msg}`);
+}
+async function cmdSchedAll(key) {
+  const src = App.cabs[key], rows = schedRows();
+  const targets = App.visibleCabs().filter(c => c.cfg.area === src.cfg.area && c.online);
+  if (!await confirmAction(`Áp dụng lịch này cho ${targets.length} tủ ${src.cfg.area}?`, targets.map(c => esc(c.cfg.id)).join(', '))) return;
+  toast('Đang gửi lịch…');
+  let ok = 0;
+  for (const c of targets) {
+    const rs = await Promise.all(rows.map(r => App.send(c, `sched ${r.ch} ${r.en} ${r.on} ${r.off}`, `Lịch K${r.ch}: ${r.en ? r.on + ' → ' + r.off : 'tắt lịch'}`)));
+    if (rs.every(r => r.ok)) ok++;
+  }
+  toast(`Đã áp dụng lịch cho ${ok}/${targets.length} tủ`);
+}
+
+/* =====================================================================
+   9. GIAO DIỆN
+   ===================================================================== */
+const PHC = ['var(--pa)', 'var(--pb)', 'var(--pc)'];
+function statusPill(s) {
+  return {ok: '<span class="pill ok">Bình thường</span>', warn: '<span class="pill warn">Cảnh báo</span>',
+    bad: '<span class="pill bad">Sự cố</span>', off: '<span class="pill">Mất kết nối</span>'}[s];
+}
+function lampsHtml(cab, clickable) {
+  const d = (cab.tele || {}).do || [];
+  return `<div class="lamps">${cab.cfg.doNames.map((n, c) => {
+    const on = d[c] === 1, short = n.split('·')[0].trim();
+    const pend = App.pendingFor(cab.cfg.key, n) ? ' style="opacity:.5"' : '';
+    return clickable
+      ? `<button class="lamp${on ? ' on' : ''}"${pend} data-act="do" data-key="${esc(cab.cfg.key)}" data-ch="${c + 1}" data-val="${on ? 0 : 1}" title="${esc(n)}" aria-label="${on ? 'Tắt' : 'Bật'} ${esc(n)}"><i></i>${esc(short)}</button>`
+      : `<span class="lamp${on ? ' on' : ''}" title="${esc(n)}"><i></i>${esc(short)}</span>`;
+  }).join('')}</div>`;
+}
+function alarmPills(cab) {
+  return Object.values(cab.active).map(a => `<span class="pill ${ALARM[a.code].sev >= 3 ? 'bad' : 'warn'}">${ALARM[a.code].icon} ${esc(ALARM[a.code].label)}${a.phase && a.phase !== '-' ? ' ' + phaseLabel(a.code, a.phase) : ''}</span>`).join('');
+}
+function cabCard(cab) {
+  const s = App.cabState(cab), t = cab.tele || {}, i = t.i || [], mi = modeInfo(t);
+  const maxI = Math.max(2, ...i.filter(x => x !== null)) * 1.2;
+  const ptot = (t.p || []).reduce((a, b) => a + (b || 0), 0);
+  const vs = (t.v || []).filter(x => x !== null), vavg = vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null;
+  const ago = Math.round((Date.now() - cab.lastSeen) / 1000);
+  const al = alarmPills(cab);
+  return `<a class="card s-${s}" href="#/tu/${encodeURIComponent(cab.cfg.key)}">
+    <div class="row"><div class="grow"><span class="cid">${esc(cab.cfg.id)}</span> · ${esc(cab.cfg.name)}
+      <div class="sub">${esc(cab.cfg.area)} · ${mi.txt}${t.di && t.di[DI.DOOR] ? ' · 🚪 cửa mở' : ''}${t.maint ? ' · 🔧' : ''}</div></div>
+      ${cab.cfg.source === 'mqtt' ? '<span class="pill acc">Thật</span>' : ''}${statusPill(s)}</div>
+    ${lampsHtml(cab, false)}
+    <div class="phases">${[0, 1, 2].map(k => {
+      const v = i[k] ?? null, zero = (t.do || []).some(x => x) && v !== null && v < CFG.I_ZERO;
+      return `<div class="ph${zero ? ' zero' : ''}"><i style="color:${PHC[k]}">${'ABC'[k]}</i>${v === null ? '—' : v.toFixed(1) + ' A'}<div class="bar"><div style="width:${v === null ? 0 : Math.min(100, v / maxI * 100)}%;background:${PHC[k]}"></div></div></div>`;
+    }).join('')}</div>
+    <div class="sub" style="margin-top:6px">U tb ${num(vavg, 0)} V · P ${num(ptot / 1000, 2)} kW · ${!t.ts && !cab.tele ? 'chưa có dữ liệu' : ago < 6 ? 'vừa cập nhật' : ago + ' giây trước'}</div>
+    ${al ? `<div class="alarms">${al}</div>` : ''}
+  </a>`;
+}
+function areaSelect() {
+  const areas = [...new Set(App.visibleCabs().map(c => c.cfg.area))];
+  return `<select class="in" data-act="area" aria-label="Lọc khu vực"><option value="">Tất cả khu vực</option>${areas.map(a => `<option${a === App.area ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select>`;
+}
+
+/* ---------- Tổng quan ---------- */
+function viewHome() {
+  const cabs = App.visibleCabs().sort((a, b) => a.cfg.id.localeCompare(b.cfg.id));
+  const online = cabs.filter(c => c.online).length;
+  const lit = cabs.filter(c => (c.tele?.do || []).some(x => x)).length;
+  const pkw = cabs.reduce((s, c) => s + (c.tele?.p || []).reduce((a, b) => a + (b || 0), 0), 0) / 1000;
+  const today = cabs.reduce((s, c) => s + energyStats(c.cfg.key, App.nowFor(c)).today, 0);
+  const openInc = App.incidents.filter(x => x.status !== 'done').length;
+  const order = {bad: 0, warn: 1, off: 2, ok: 3};
+  const attn = cabs.filter(c => App.cabState(c) !== 'ok').sort((a, b) => order[App.cabState(a)] - order[App.cabState(b)]);
+  const okCabs = cabs.filter(c => App.cabState(c) === 'ok');
+  return `<h1>Tổng quan</h1>
+    <div class="kpis">
+      <div class="kpi"><span>Tủ trực tuyến</span><b>${online}<small>/ ${cabs.length}</small></b></div>
+      <div class="kpi"><span>Tủ đang sáng</span><b>${lit}</b></div>
+      <div class="kpi"><span>Công suất tổng</span><b>${pkw.toFixed(1)}<small>kW</small></b></div>
+      <div class="kpi"><span>Điện năng hôm nay</span><b>${today.toFixed(1)}<small>kWh</small></b></div>
+      <a class="kpi" href="#/canh-bao" style="color:inherit"><span>Sự cố chưa xong</span><b style="color:${openInc ? 'var(--bad)' : 'var(--ok)'}">${openInc}</b></a>
+    </div>
+    ${attn.length ? `<h3>Cần chú ý (${attn.length})</h3><div class="grid">${attn.map(cabCard).join('')}</div>` : ''}
+    ${okCabs.length ? `<h3>Hoạt động bình thường (${okCabs.length})</h3><div class="grid">${okCabs.map(cabCard).join('')}</div>` : ''}
+    ${cabs.length ? '' : '<div class="empty">Chưa có tủ. Bật chế độ Demo hoặc kết nối thiết bị trong <a href="#/cai-dat">Cài đặt</a>.</div>'}`;
+}
+
+/* ---------- Danh sách tủ ---------- */
+function viewCabList() {
+  const cabs = App.visibleCabs().filter(c => !App.area || c.cfg.area === App.area).sort((a, b) => a.cfg.id.localeCompare(b.cfg.id));
+  return `<div class="row" style="margin-bottom:10px"><h1 class="grow" style="margin:0">Tủ điều khiển</h1>${areaSelect()}</div>
+    <div class="grid">${cabs.map(cabCard).join('') || '<div class="empty">Không có tủ</div>'}</div>`;
+}
+
+/* ---------- Chi tiết tủ ---------- */
+const TABS = [['do-luong', 'Đo lường'], ['vao-ra', 'Vào / Ra'], ['dien-nang', 'Điện năng'], ['lich', 'Lịch'], ['nhat-ky', 'Nhật ký']];
+function viewCab(key, tab) {
+  const cab = App.cabs[key];
+  if (!cab) return '<div class="empty">Không tìm thấy tủ. <a href="#/tu">Về danh sách</a></div>';
+  const t = cab.tele || {}, s = App.cabState(cab), mi = modeInfo(t);
+  const ago = Math.round((Date.now() - cab.lastSeen) / 1000);
+  const body = {'do-luong': tabMeasure, 'vao-ra': tabIO, 'dien-nang': tabEnergy, 'lich': tabSched, 'nhat-ky': tabLog}[tab](cab);
+  return `<a class="back" href="#/tu">‹ Danh sách tủ</a>
+    <div class="panel"><div class="row"><div class="grow"><h1 style="margin:0">${esc(cab.cfg.id)} · ${esc(cab.cfg.name)}</h1>
+      <div class="sub">${esc(cab.cfg.area)} · ${esc(cab.cfg.team)} · ${cab.online ? (!cab.tele ? 'chưa có dữ liệu' : ago < 6 ? 'vừa cập nhật' : `cập nhật ${ago} giây trước`) : '<b style="color:var(--bad)">mất kết nối</b>'}</div></div></div>
+      <div class="row" style="margin-top:6px">${statusPill(s)}<span class="pill ${mi.cls}">${mi.txt}</span></div>
+      ${lampsHtml(cab, true)}
+      ${Object.keys(cab.active).length ? `<div class="alarms">${alarmPills(cab)}</div>` : ''}
+      <div class="btns">
+        <button class="btn sm" data-act="mode-auto" data-key="${esc(key)}" ${t.mode === 'remote' ? '' : 'disabled'}>🕒 Về tự động</button>
+        <button class="btn sm" data-act="maint" data-key="${esc(key)}" data-val="${t.maint ? 0 : 1}">🔧 ${t.maint ? 'Kết thúc bảo trì' : 'Bật bảo trì'}</button>
+        <button class="btn sm" data-act="status" data-key="${esc(key)}">🔄 Đọc lại</button>
+      </div></div>
+    <div class="tabs">${TABS.map(([k, n]) => `<a href="#/tu/${encodeURIComponent(key)}/${k}" class="${k === tab ? 'on' : ''}">${n}</a>`).join('')}</div>
+    ${body}`;
+}
+function legend() { return `<div class="legend">${[0, 1, 2].map(k => `<span><i style="background:${PHC[k]}"></i>Pha ${'ABC'[k]}</span>`).join('')}</div>`; }
+function tabMeasure(cab) {
+  const t = cab.tele || {}, v = t.v || [], i = t.i || [], p = t.p || [], pf = t.pf || [];
+  const ptot = p.reduce((a, b) => a + (b || 0), 0);
+  const range = (arr, k) => {
+    const xs = cab.hist.map(h => h[arr][k]).filter(x => x !== null && x !== undefined);
+    return xs.length ? `${Math.min(...xs).toFixed(arr === 'v' ? 0 : 1)}–${Math.max(...xs).toFixed(arr === 'v' ? 0 : 1)}` : '—';
+  };
+  const cols = f => [0, 1, 2].map(f).join('');
+  return `<div class="kpis">
+      <div class="kpi"><span>Công suất tổng</span><b>${num(ptot / 1000, 2)}<small>kW</small></b></div>
+      <div class="kpi"><span>Tần số</span><b>${num(t.f, 2)}<small>Hz</small></b></div>
+      <div class="kpi"><span>Chỉ số điện năng</span><b>${num(t.kwh, 1)}<small>kWh</small></b></div>
+      <div class="kpi"><span>Độ nghiêng tủ</span><b>${num(t.tilt, 1)}<small>°</small></b></div>
+    </div>
+    <div class="panel"><h2>Thông số 3 pha</h2>
+      <table><thead><tr><th></th>${cols(k => `<th class="num" style="color:${PHC[k]}">Pha ${'ABC'[k]}</th>`)}</tr></thead><tbody>
+      <tr><td>Điện áp (V)</td>${cols(k => `<td class="num"><b>${num(v[k], 1)}</b></td>`)}</tr>
+      <tr><td>Dòng điện (A)</td>${cols(k => `<td class="num"><b>${num(i[k], 2)}</b></td>`)}</tr>
+      <tr><td>Công suất (W)</td>${cols(k => `<td class="num">${num(p[k], 0)}</td>`)}</tr>
+      <tr><td>Hệ số cos φ</td>${cols(k => `<td class="num">${num(pf[k], 2)}</td>`)}</tr>
+      <tr><td class="sub">Dải U 10 phút</td>${cols(k => `<td class="num sub">${range('v', k)}</td>`)}</tr>
+      <tr><td class="sub">Dải I 10 phút</td>${cols(k => `<td class="num sub">${range('i', k)}</td>`)}</tr>
+      </tbody></table></div>
+    <div class="cols">
+      <div class="panel"><h2>Dòng điện (A)</h2><canvas id="chI"></canvas>${legend()}</div>
+      <div class="panel"><h2>Điện áp (V)</h2><canvas id="chV"></canvas>${legend()}</div>
+    </div>`;
+}
+function tabIO(cab) {
+  const t = cab.tele || {}, d = t.do || [], di = t.di || [], sch = t.sch || DEF_SCHED, key = cab.cfg.key;
+  const local = di[DI.AUTO] === 0;
+  return `<div class="cols">
+    <div class="panel"><h2>Đầu ra (DO) – điều khiển</h2>
+      ${local ? '<div class="pill warn" style="margin-bottom:8px;white-space:normal">✋ Công tắc tại tủ đang ở Tay – lệnh từ xa sẽ bị từ chối</div>' : ''}
+      ${cab.cfg.doNames.map((n, c) => {
+        const on = d[c] === 1, fbIdx = FB_OF_DO[c], fb = fbIdx >= 0 ? di[fbIdx] : undefined;
+        const mismatch = fb !== undefined && t.do && fb !== d[c];
+        const s = sch[c] || [0, 0, 0], pend = App.pendingFor(key, n);
+        return `<div class="io"><span class="led ${on ? 'lampon' : ''}"></span>
+          <div class="grow"><b>DO${c + 1} · ${esc(n)}</b>
+            <div class="sub">${on ? 'Đang đóng (sáng)' : 'Đang cắt'}${fb !== undefined ? ` · phản hồi: ${fb ? 'đóng' : 'mở'} ${mismatch ? '<b style="color:var(--bad)">⚠ lệch</b>' : '✔'}` : ''}
+            · lịch ${s[0] ? hm(s[1]) + '→' + hm(s[2]) : 'tắt'}${pend ? ' · <b>đang gửi lệnh…</b>' : ''}</div></div>
+          <button class="switch${on ? ' on' : ''}${pend ? ' pending' : ''}" role="switch" aria-checked="${on}" aria-label="${esc(n)}" data-act="do" data-key="${esc(key)}" data-ch="${c + 1}" data-val="${on ? 0 : 1}"></button></div>`;
+      }).join('')}
+      <div class="btns"><button class="btn sm" data-act="all" data-key="${esc(key)}" data-val="1">💡 Bật tất cả</button>
+        <button class="btn sm" data-act="all" data-key="${esc(key)}" data-val="0">⚫ Tắt tất cả</button>
+        <button class="btn sm" data-act="mode-auto" data-key="${esc(key)}">🕒 Về tự động</button></div>
+    </div>
+    <div class="panel"><h2>Đầu vào (DI) – giám sát</h2>
+      ${cab.cfg.diNames.map((n, k) => {
+        const val = di[k], m = DI_META[k];
+        let cls = val ? 'on' : '';
+        if (m.normal !== null && val !== undefined && val !== m.normal) cls = 'bad';
+        return `<div class="io"><span class="led ${cls}"></span><div class="grow"><b>DI${k + 1} · ${esc(n)}</b></div>
+          <span class="pill ${cls === 'bad' ? 'bad' : ''}">${val === undefined ? '—' : val ? m.on : m.off}</span></div>`;
+      }).join('')}
+      <div class="sub" style="margin-top:8px">Bảo trì: ${t.maint ? 'BẬT (không báo mở cửa)' : 'tắt'} · Sóng ${num(t.rssi, 0)} dBm · Hàng đợi ${t.q ?? '—'} · Thẻ SD ${t.sd ? 'OK' : '—'}</div>
+    </div></div>`;
+}
+function tabEnergy(cab) {
+  const st = energyStats(cab.cfg.key, App.nowFor(cab)), t = cab.tele || {};
+  return `<div class="kpis">
+      <div class="kpi"><span>Chỉ số tổng</span><b>${num(t.kwh, 1)}<small>kWh</small></b></div>
+      <div class="kpi"><span>Hôm nay</span><b>${st.today.toFixed(1)}<small>kWh</small></b></div>
+      <div class="kpi"><span>Tháng này</span><b>${st.month.toFixed(0)}<small>kWh</small></b></div>
+      <div class="kpi"><span>TB / ngày (13 ngày)</span><b>${st.avg.toFixed(1)}<small>kWh</small></b></div>
+    </div>
+    <div class="panel"><div class="row"><h2 class="grow">Điện năng 14 ngày</h2><button class="btn sm" data-act="energy-csv" data-key="${esc(cab.cfg.key)}">⬇️ Excel</button></div>
+      <canvas id="chE"></canvas>
+      ${cab.cfg.source === 'sim' ? '<div class="sub" style="margin-top:6px">Số liệu các ngày trước của tủ demo là dữ liệu mẫu.</div>' : ''}</div>
+    <div class="panel"><table><thead><tr><th>Ngày</th><th class="num">kWh</th></tr></thead><tbody>
+      ${st.days.slice().reverse().map(d => `<tr><td>${d.k.split('-').reverse().join('/')}</td><td class="num">${d.v.toFixed(2)}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+function tabSched(cab) {
+  const sch = cab.tele?.sch || DEF_SCHED, key = cab.cfg.key;
+  return `<div class="panel"><h2>Lịch bật / tắt từng kênh</h2>
+    <p class="sub">Lịch lưu trong bộ nhớ của tủ: mất mạng tủ vẫn bật/tắt đúng giờ. Chỉ áp dụng khi tủ ở chế độ <b>Tự động</b>. Giờ tắt nhỏ hơn giờ bật nghĩa là qua đêm.</p>
+    ${cab.cfg.doNames.map((n, c) => {
+      const s = sch[c] || [0, 1080, 330];
+      return `<div class="io" data-sched-row="${c + 1}" style="flex-wrap:wrap">
+        <label class="row grow" style="min-width:150px"><input type="checkbox" class="s-en" ${s[0] ? 'checked' : ''} style="width:18px;height:18px"> <b>${esc(n)}</b></label>
+        <span class="row"><input type="time" class="in s-on" value="${hm(s[1])}" aria-label="Giờ bật ${esc(n)}"> →
+        <input type="time" class="in s-off" value="${hm(s[2])}" aria-label="Giờ tắt ${esc(n)}">
+        <button class="btn sm pri" data-act="sched" data-key="${esc(key)}" data-ch="${c + 1}">Lưu</button></span></div>`;
+    }).join('')}
+    <div class="btns"><button class="btn" data-act="sched-all" data-key="${esc(key)}">📋 Áp dụng lịch này cho các tủ ${esc(cab.cfg.area)}</button></div></div>`;
+}
+function tabLog(cab) {
+  return `<div class="panel"><h2>Nhật ký tủ (phiên này)</h2>${cab.log.length ? cab.log.map(l => `<div class="io"><span class="sub" style="min-width:90px">${fmtTime(l.t)}</span><span class="grow">${esc(l.s)}</span></div>`).join('') : '<div class="empty">Chưa có sự kiện</div>'}</div>`;
+}
+
+/* ---------- Điều khiển tập trung ---------- */
+function viewControl() {
+  const cabs = App.visibleCabs().filter(c => !App.area || c.cfg.area === App.area).sort((a, b) => a.cfg.id.localeCompare(b.cfg.id));
+  const allSel = cabs.length && cabs.every(c => App.sel.has(c.cfg.key));
+  const nSel = [...App.sel].filter(k => App.cabs[k] && App.visibleCabs().includes(App.cabs[k])).length;
+  return `<div class="row" style="margin-bottom:10px"><h1 class="grow" style="margin:0">Điều khiển tập trung</h1>${areaSelect()}</div>
+    <div class="panel">
+      <label class="ctl-row" style="padding-top:0"><input type="checkbox" data-act="sel-all" ${allSel ? 'checked' : ''}><span class="grow"><b>Chọn tất cả (${cabs.length} tủ)</b><span class="sub" style="display:block">Bấm nút K để bật/tắt riêng từng kênh</span></span></label>
+      ${cabs.map(c => `<div class="ctl-row"><input type="checkbox" data-act="sel" data-key="${esc(c.cfg.key)}" ${App.sel.has(c.cfg.key) ? 'checked' : ''} aria-label="Chọn ${esc(c.cfg.id)}">
+          <div class="grow"><span class="dot ${({ok: 'ok', warn: 'warn', bad: 'bad', off: ''})[App.cabState(c)]}"></span> <a href="#/tu/${encodeURIComponent(c.cfg.key)}/vao-ra"><b>${esc(c.cfg.id)}</b></a> <span class="sub">${esc(c.cfg.name)} · ${modeInfo(c.tele).txt}</span>
+          ${lampsHtml(c, true)}</div></div>`).join('')}
+    </div>
+    <div class="sticky-bar"><div class="row">
+      <b class="grow">Đã chọn ${nSel} tủ</b>
+      <select class="in" id="bulkCh" data-act="bulk-ch" aria-label="Kênh"><option value="all">Tất cả kênh</option>${DEF_DO.map((n, c) => `<option value="${c + 1}"${App.bulkCh === String(c + 1) ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>
+    </div><div class="btns" style="margin-top:8px">
+      <button class="btn ok" data-act="bulk" data-val="1">💡 Bật</button>
+      <button class="btn" data-act="bulk" data-val="0">⚫ Tắt</button>
+      <button class="btn" data-act="bulk" data-val="auto">🕒 Về tự động</button>
+    </div></div>`;
+}
+
+/* ---------- Cảnh báo / sự cố ---------- */
+function viewAlerts() {
+  const f = App.incFilter, teams = App.settings.teams;
+  const list = App.incidents.filter(x => f === 'all' || (f === 'open' ? x.status !== 'done' : x.status === f))
+    .sort((a, b) => (a.status === 'done') - (b.status === 'done') || (ALARM[b.code]?.sev || 0) - (ALARM[a.code]?.sev || 0) || b.at - a.at);
+  const openLogs = new Set([...document.querySelectorAll('#main details[open]')].map(d => d.dataset.no));
+  return `<div class="row" style="margin-bottom:10px"><h1 class="grow" style="margin:0">Cảnh báo & sự cố</h1>
+      <button class="btn sm" data-act="report">📋 Báo cáo ngày</button><button class="btn sm" data-act="inc-csv">⬇️ Excel</button></div>
+    <div class="tabs">${[['open', 'Chưa xong'], ['new', 'Mới'], ['assigned', 'Đã giao'], ['doing', 'Đang xử lý'], ['done', 'Hoàn thành'], ['all', 'Tất cả']]
+      .map(([k, n]) => `<button data-act="inc-filter" data-val="${k}" class="${k === f ? 'on' : ''}">${n}</button>`).join('')}</div>
+    <div class="grid">${list.map(x => {
+      const info = ALARM[x.code] || {label: x.code, icon: '•', act: '', sev: 1};
+      const sevCls = info.sev >= 3 ? 'bad' : info.sev === 2 ? 'warn' : 'off';
       const stPill = x.status === 'done' ? 'ok' : x.status === 'new' ? 'bad' : 'warn';
-      const teamOpts = TEAMS.map(t => `<option${t === x.team ? ' selected' : ''}>${esc(t)}</option>`).join('');
-      const btns = x.status === 'done' ? `<button class="btn sm" data-a="reopen">Mở lại</button>` :
-        (x.status === 'new' ? `<button class="btn sm pri" data-a="assign">Giao việc</button>` : '') +
-        (x.status !== 'doing' ? `<button class="btn sm" data-a="doing">Đang xử lý</button>` : '') +
-        `<button class="btn sm" data-a="done">Hoàn thành</button>`;
-      return `<div class="card inc s-${sevCls}" data-no="${esc(x.no)}">
-        <div class="row"><div class="grow"><span class="ttl">${info.icon} ${esc(info.label)}${x.phases.length ? ' – pha ' + x.phases.join(', ') : ''}</span>
-          <div class="sub">${esc(x.no)} · <b>${esc(x.tu)}</b> ${esc(x.name)} · ${esc(x.area)}</div>
+      const ph = x.phases.length ? ' – ' + x.phases.map(p => phaseLabel(x.code, p)).join(', ') : '';
+      const btns = x.status === 'done' ? `<button class="btn sm" data-act="inc" data-op="reopen" data-no="${x.no}">Mở lại</button>` :
+        (x.status === 'new' ? `<button class="btn sm pri" data-act="inc" data-op="assign" data-no="${x.no}">Giao việc</button>` : '') +
+        (x.status !== 'doing' ? `<button class="btn sm" data-act="inc" data-op="doing" data-no="${x.no}">Đang xử lý</button>` : '') +
+        `<button class="btn sm" data-act="inc" data-op="done" data-no="${x.no}">Hoàn thành</button>`;
+      return `<div class="card inc s-${sevCls}">
+        <div class="row"><div class="grow"><b>${info.icon} ${esc(info.label)}${esc(ph)}</b>
+          <div class="sub">${esc(x.no)} · <a href="#/tu/${encodeURIComponent(x.cab)}"><b>${esc(x.tu)}</b></a> ${esc(x.name)} · ${esc(x.area)}</div>
           <div class="sub">🕒 ${fmtTime(x.at)}${x.count > 1 ? ` · lặp ${x.count} lần` : ''}${x.cleared ? ' · <b style="color:var(--ok)">thiết bị báo đã hết</b>' : ''}</div></div>
           <span class="pill ${stPill}">${STATUS[x.status]}</span></div>
         <div class="act">👉 ${esc(info.act)}</div>
         ${x.note ? `<div class="sub" style="margin-top:6px">📝 ${esc(x.note)}</div>` : ''}
-        <div class="btns"><select data-a="team" aria-label="Tổ phụ trách">${teamOpts}</select>${btns}
-          <button class="btn sm" data-a="zalo">📤 Chép tin Zalo</button></div>
-        <details class="log"${openLogs.has(x.no) ? ' open' : ''}><summary>Nhật ký (${x.log.length})</summary>${x.log.map(l => `<div>${fmtTime(l.t)} – ${esc(l.s)}</div>`).join('')}</details>
+        <div class="btns"><select class="in" data-act="inc-team" data-no="${x.no}" aria-label="Tổ phụ trách">${teams.map(t => `<option${t === x.team ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>${btns}
+          <button class="btn sm" data-act="inc" data-op="zalo" data-no="${x.no}">📤 Zalo</button></div>
+        <details class="log" data-no="${x.no}"${openLogs.has(x.no) ? ' open' : ''}><summary>Nhật ký (${x.log.length})</summary>${x.log.map(l => `<div>${fmtTime(l.t)} – ${esc(l.s)}</div>`).join('')}</details>
       </div>`;
-    }).join('');
-  },
+    }).join('') || '<div class="empty">Không có sự cố ở mục này.</div>'}</div>`;
+}
+function zaloText(x) {
+  const info = ALARM[x.code], cab = App.cabs[x.cab], t = cab?.tele || {};
+  const lines = [`🚨 [${x.no}] ${info.label}${x.phases.length ? ' – ' + x.phases.map(p => phaseLabel(x.code, p)).join(', ') : ''}`,
+    `Tủ: ${x.tu} – ${x.name} (${x.area})`, `Lúc: ${fmtTime(x.at)}`];
+  if (t.i) lines.push(`Dòng hiện tại: A ${t.i[0] ?? '—'}A · B ${t.i[1] ?? '—'}A · C ${t.i[2] ?? '—'}A`);
+  lines.push(`Giao: ${x.team}`, `Hướng xử lý: ${info.act}`);
+  return lines.join('\n');
+}
+function dailyReport() {
+  const d = new Date(App.settings.demo ? Clock.ms : Date.now()), k = dayKey(d.getTime());
+  const today = App.incidents.filter(x => dayKey(x.at) === k);
+  const by = (arr, fn) => arr.reduce((m, x) => (m[fn(x)] = (m[fn(x)] || 0) + 1, m), {});
+  const open = App.incidents.filter(x => x.status !== 'done');
+  const kwh = App.visibleCabs().reduce((s, c) => s + energyStats(c.cfg.key, App.nowFor(c)).today, 0);
+  let r = `BÁO CÁO NGÀY ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}\n`;
+  r += `Sự cố phát sinh: ${today.length} · Đã xong: ${today.filter(x => x.status === 'done').length}\n\n`;
+  r += 'Theo loại:\n' + (Object.entries(by(today, x => ALARM[x.code].label)).map(([a, v]) => `  • ${a}: ${v}`).join('\n') || '  (không có)') + '\n\n';
+  r += 'Theo tổ:\n' + (Object.entries(by(today, x => x.team)).map(([a, v]) => `  • ${a}: ${v}`).join('\n') || '  (không có)') + '\n\n';
+  r += `Điện năng tiêu thụ hôm nay (đến hiện tại): ${kwh.toFixed(1)} kWh\n\n`;
+  r += `Tồn chưa xong: ${open.length}\n` + open.map(x => `  • ${x.no} ${x.tu} – ${ALARM[x.code].label} – ${x.team} – ${STATUS[x.status]}`).join('\n');
+  return r;
+}
 
-  renderSheet(){
-    const cab = this.cabs[this.openKey]; if (!cab) return;
-    const t = cab.tele || {}, s = this.cabState(cab);
-    const v = t.v || [null,null,null], i = t.i || [null,null,null];
-    const f = n => n === null || n === undefined ? '—' : n;
-    const al = Object.values(cab.active);
-    $('#sheet').innerHTML = `
-      <div class="row"><div class="grow"><h2 style="margin:0">${esc(cab.id)} · ${esc(cab.name)}</h2>
-        <div class="sub">${esc(cab.area)} · phụ trách: ${esc(cab.team)} · ${cab.online ? 'đang kết nối' : '<b style="color:var(--bad)">mất kết nối</b>'}</div></div>
-        <button class="btn sm" id="sheetClose">Đóng</button></div>
-      <h3>Điện 3 pha</h3>
-      <div class="kv">${[0,1,2].map(k => `<div><span>Pha ${'ABC'[k]}</span><b>${f(v[k])} V · ${f(i[k])} A</b></div>`).join('')}
-        <div><span>Công suất</span><b>${f(t.p)} W</b></div><div><span>Điện năng</span><b>${f(t.kwh)} kWh</b></div>
-        <div><span>Relay</span><b>${t.relay ? '💡 Đóng' : '⚫ Cắt'} (${t.mode === 'auto' ? 'tự động' : t.mode === 'on' ? 'cưỡng bức bật' : t.mode === 'off' ? 'cưỡng bức tắt' : '—'})</b></div>
-        <div><span>Cửa tủ</span><b>${t.door ? '🚪 Mở' : 'Đóng'}</b></div><div><span>Độ nghiêng</span><b>${f(t.tilt)}°</b></div>
-        <div><span>Sóng</span><b>${f(t.rssi)} dBm</b></div></div>
-      <h3>Dòng điện 60 mẫu gần nhất</h3>
-      <canvas id="chart"></canvas>
-      <div class="legend"><span><i style="background:var(--pa)"></i>Pha A</span><span><i style="background:var(--pb)"></i>Pha B</span><span><i style="background:var(--pc)"></i>Pha C</span></div>
-      <h3>Cảnh báo đang hoạt động</h3>
-      ${al.length ? al.map(a => `<div class="sub">${ALARM[a.code].icon} <b>${esc(ALARM[a.code].label)}</b>${a.phase && a.phase !== '-' ? ' pha ' + a.phase : ''} – ${esc(a.msg)}</div>`).join('') : '<div class="sub">Không có</div>'}
-      <h3>Điều khiển từ xa</h3>
-      <div class="btns" style="margin-top:0">
-        <button class="btn" data-cmd="on">💡 Bật</button><button class="btn" data-cmd="off">⚫ Tắt</button>
-        <button class="btn" data-cmd="auto">🕒 Theo lịch</button>
-        <button class="btn" data-cmd="${t.maint ? 'maint_off' : 'maint_on'}">${t.maint ? '🔧 Kết thúc bảo trì' : '🔧 Bật chế độ bảo trì'}</button>
-      </div>
-      <p class="note">Bật chế độ bảo trì trước khi cho tổ đến mở tủ, để không báo nhầm "mở cửa trái phép".</p>`;
-    this.drawChart(cab);
-  },
-
-  drawChart(cab){
-    const cv = $('#chart'); if (!cv) return;
-    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
-    cv.width = w * dpr; cv.height = h * dpr;
-    const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
-    const css = getComputedStyle(document.documentElement);
-    const hist = cab.hist, max = Math.max(1, ...hist.flat().filter(x => x !== null)) * 1.15;
-    ctx.strokeStyle = css.getPropertyValue('--line'); ctx.lineWidth = 1;
-    for (let g = 1; g < 4; g++){ const y = h * g / 4; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
-    ctx.fillStyle = css.getPropertyValue('--muted'); ctx.font = '11px system-ui';
-    ctx.fillText(max.toFixed(1) + ' A', 6, 13);
-    ['--pa','--pb','--pc'].forEach((c, k) => {
-      ctx.strokeStyle = css.getPropertyValue(c).trim(); ctx.lineWidth = 2; ctx.beginPath();
-      hist.forEach((p, n) => { const x = w * n / 59, y = h - 6 - ((p[k] ?? 0) / max) * (h - 18); n ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-      ctx.stroke();
-    });
-  },
-
-  render(){
-    const now = Date.now();
-    Object.values(this.cabs).forEach(c => Object.keys(c.active).forEach(k => { if (c.active[k].exp && c.active[k].exp < now) delete c.active[k]; }));
-    this.renderCabs();
-    if (this.incDirty){ this.incDirty = false; this.renderIncs(); }   // chỉ vẽ lại khi có thay đổi
-    if (this.openKey) this.renderSheet();
-  },
-
-  /* ---------- Báo cáo ---------- */
-  zaloText(x){
-    const info = ALARM[x.code], cab = this.cabs[x.cab], t = cab?.tele || {};
-    const lines = [`🚨 [${x.no}] ${info.label}${x.phases.length ? ' – pha ' + x.phases.join(', ') : ''}`,
-      `Tủ: ${x.tu} – ${x.name} (${x.area})`, `Lúc: ${fmtTime(x.at)}`];
-    if (t.i) lines.push(`Dòng hiện tại: A ${t.i[0] ?? '—'}A · B ${t.i[1] ?? '—'}A · C ${t.i[2] ?? '—'}A`);
-    lines.push(`Giao: ${x.team}`, `Hướng xử lý: ${info.act}`);
-    return lines.join('\n');
-  },
-  report(){
-    const d = new Date(Clock.ms), day = x => new Date(x.at).toDateString() === d.toDateString();
-    const today = this.incidents.filter(day);
-    const by = (arr, fn) => arr.reduce((m, x) => (m[fn(x)] = (m[fn(x)] || 0) + 1, m), {});
-    const types = by(today, x => ALARM[x.code].label), teams = by(today, x => x.team);
-    const open = this.incidents.filter(x => x.status !== 'done');
-    let r = `BÁO CÁO SỰ CỐ NGÀY ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}\n`;
-    r += `Tổng phát sinh trong ngày: ${today.length} · Đã xong: ${today.filter(x => x.status === 'done').length}\n\n`;
-    r += 'Theo loại:\n' + (Object.entries(types).map(([k, v]) => `  • ${k}: ${v}`).join('\n') || '  (không có)') + '\n\n';
-    r += 'Theo tổ:\n' + (Object.entries(teams).map(([k, v]) => `  • ${k}: ${v}`).join('\n') || '  (không có)') + '\n\n';
-    r += `Tồn chưa xong (tất cả các ngày): ${open.length}\n`;
-    r += open.map(x => `  • ${x.no} ${x.tu} – ${ALARM[x.code].label} – ${x.team} – ${STATUS[x.status]}`).join('\n');
-    return r;
-  },
-  csv(){
-    const head = ['Mã','Thời gian','Tủ','Tên tủ','Khu vực','Loại sự cố','Pha','Mức độ','Trạng thái','Tổ phụ trách','Số lần lặp','Thiết bị báo hết','Ghi chú'];
-    const sev = {3:'Khẩn', 2:'Cao', 1:'Thường'};
-    const rows = this.incidents.map(x => [x.no, fmtTime(x.at), x.tu, x.name, x.area, ALARM[x.code].label, x.phases.join(' '),
-      sev[ALARM[x.code].sev], STATUS[x.status], x.team, x.count, x.cleared ? 'Có' : 'Không', x.note]);
-    const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const text = '\ufeff' + [head, ...rows].map(r => r.map(q).join(',')).join('\r\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([text], {type:'text/csv;charset=utf-8'}));
-    const d = new Date(Clock.ms); a.download = `su-co-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.csv`;
-    document.body.appendChild(a); a.click(); a.remove();
-  }
-};
-
-/* ===================== Bảng sự cố giả lập ===================== */
+/* ---------- Cài đặt ---------- */
 const FAULTS = [
-  {k:'cutA', icon:'✂️', label:'Cắt trộm cáp pha A', hint:'Mất dòng, điện áp vẫn còn'},
-  {k:'cutB', icon:'✂️', label:'Cắt trộm cáp pha B', hint:'Mất dòng, điện áp vẫn còn'},
-  {k:'cutC', icon:'✂️', label:'Cắt trộm cáp pha C', hint:'Mất dòng, điện áp vẫn còn'},
-  {k:'crash', icon:'💥', label:'Xe va chạm', hint:'Rung mạnh + tủ nghiêng 22°', once:true},
-  {k:'door', icon:'🚪', label:'Mở cửa tủ', hint:'Báo nếu không ở chế độ bảo trì'},
-  {k:'mains', icon:'⚡', label:'Mất điện lưới', hint:'Không báo nhầm thành cắt cáp'},
-  {k:'contactorFail', icon:'🌑', label:'Hỏng contactor', hint:'Thử: bật lỗi rồi nhảy giờ 17:59'},
-  {k:'contactorStuck', icon:'☀️', label:'Dính contactor', hint:'Thử: bật lỗi rồi nhảy giờ 05:29'},
-  {k:'offline', icon:'📡', label:'Mất sóng 4G', hint:'Thiết bị giữ cảnh báo, gửi bù sau'},
-  {k:'meterFail', icon:'🔌', label:'Lỗi đồng hồ RS485', hint:'Không đọc được Modbus'}
+  ['cutA', '✂️ Cắt cáp pha A'], ['cutB', '✂️ Cắt cáp pha B'], ['cutC', '✂️ Cắt cáp pha C'],
+  ['door', '🚪 Mở cửa tủ'], ['cbTrip', '🔻 Nhảy CB tổng'], ['mains', '⚡ Mất điện lưới'],
+  ['kfail1', '🧲 K1 không đóng'], ['kstuck1', '🧲 K1 dính'], ['kfail2', '🧲 K2 không đóng'],
+  ['spdFail', '🌩️ Hỏng chống sét'], ['local', '✋ Gạt về Tay'], ['crash', '💥 Xe va chạm'],
+  ['offline', '📡 Mất sóng 4G'], ['meter', '🔌 Lỗi đồng hồ']
 ];
-function faultActive(d, k){
-  if (k.startsWith('cut')) return d.faults.cut['ABC'.indexOf(k[3])];
+function simFaultOn(d, k) {
+  if (k.startsWith('cut')) return d.f.cut['ABC'.indexOf(k[3])];
+  if (k.startsWith('kfail')) return d.f.kfail[+k[5] - 1];
+  if (k.startsWith('kstuck')) return d.f.kstuck[+k[6] - 1];
   if (k === 'crash') return d.tilt > CFG.TILT_ALARM;
-  return d.faults[k];
+  return !!d.f[k];
 }
-function toggleFault(d, k, force){
-  const on = force ?? !faultActive(d, k);
-  if (k.startsWith('cut')) d.faults.cut['ABC'.indexOf(k[3])] = on;
-  else if (k === 'crash'){ if (on){ d.vib = rnd(1.2, 2.5); d.tilt = 22 + rnd(0, 6); } else d.tilt = rnd(0.2, 1.2); }
+function applySimFault(d, k, on) {
+  on = !!on;
+  if (!k) return;
+  if (k.startsWith('cut')) d.f.cut['ABC'.indexOf(k[3])] = on;
+  else if (k.startsWith('kfail')) d.f.kfail[+k[5] - 1] = on;
+  else if (k.startsWith('kstuck')) d.f.kstuck[+k[6] - 1] = on;
+  else if (k === 'crash') { if (on) { d.vib = rnd(1.2, 2.5); d.tilt = 22 + rnd(0, 6); } else d.tilt = rnd(0.2, 1.2); }
   else if (k === 'offline') d.setOffline(on);
-  else d.faults[k] = on;
+  else if (k in d.f) d.f[k] = on;
 }
-function restore(d){
-  FAULTS.forEach(f => { if (faultActive(d, f.k)) toggleFault(d, f.k, false); });
+function viewSettings() {
+  const s = App.settings, mq = s.mq, d = App.devices[App.simCab];
+  const mqTxt = {off: 'Chưa kết nối', loading: 'Đang tải thư viện…', connecting: 'Đang kết nối…', on: `Đã kết nối · nghe ${App.root()}/tu/+/…`, err: 'Lỗi kết nối', retry: 'Mất kết nối broker, đang thử lại…'}[App.mqState];
+  return `<h1>Cài đặt</h1>
+  <div class="cols"><div>
+    <div class="panel"><h2>Kết nối thiết bị</h2>
+      <label class="row" style="margin-bottom:10px;flex-wrap:nowrap"><input type="checkbox" data-act="demo" ${s.demo ? 'checked' : ''} style="width:18px;height:18px;flex:none"> <span class="grow"><b>Chế độ Demo</b> – 8 tủ giả lập chạy cùng logic với firmware</span></label>
+      <div class="field"><label for="mqUrl">Broker MQTT (WebSocket)</label><input id="mqUrl" value="${esc(mq.url)}" autocomplete="off"></div>
+      <div class="field"><label for="mqRoot">Mã kênh (TOPIC_ROOT – trùng với firmware)</label><input id="mqRoot" value="${esc(mq.root)}" autocomplete="off"></div>
+      <div class="two"><div class="field"><label for="mqUser">Tài khoản broker</label><input id="mqUser" value="${esc(mq.user)}" autocomplete="off"></div>
+        <div class="field"><label for="mqPass">Mật khẩu broker</label><input id="mqPass" type="password" value="${esc(mq.pass)}" autocomplete="new-password"></div></div>
+      <label class="row" style="margin-bottom:10px"><input type="checkbox" id="mqAuto" ${mq.auto ? 'checked' : ''} style="width:18px;height:18px"> Tự kết nối khi mở app</label>
+      <div class="row"><button class="btn pri" data-act="mq">${App.mq ? 'Ngắt kết nối' : 'Lưu & kết nối'}</button><span class="sub">${mqTxt}</span></div>
+      <p class="sub">Điện thoại và máy tính cùng kết nối một broker sẽ thấy cùng số liệu và cùng điều khiển được. Broker HiveMQ công cộng chỉ để thử; dùng thật cần broker riêng có mật khẩu.</p>
+    </div>
+    <div class="panel"><h2>Bảo vệ lệnh điều khiển</h2>
+      <p class="sub">${s.pinHash ? 'Đã đặt mã PIN: lệnh bật/tắt sẽ hỏi PIN (nhớ trong 5 phút).' : 'Chưa đặt mã PIN: lệnh chỉ cần bấm xác nhận.'} PIN chỉ chống bấm nhầm trên máy này, không thay cho mật khẩu broker.</p>
+      <div class="row"><input id="pinNew" class="in" type="password" inputmode="numeric" placeholder="PIN mới (4–8 số)" autocomplete="new-password" style="width:170px">
+        <button class="btn" data-act="pin-set">Đặt PIN</button>${s.pinHash ? '<button class="btn danger" data-act="pin-clear">Bỏ PIN</button>' : ''}</div>
+    </div>
+    <div class="panel"><h2>Tổ đội</h2>
+      <div class="field"><label for="teams">Mỗi dòng một tổ</label><textarea id="teams" rows="4">${esc(s.teams.join('\n'))}</textarea></div>
+      <button class="btn" data-act="teams">Lưu tổ đội</button>
+    </div>
+    <div class="panel"><h2>Danh sách tủ</h2>
+      ${App.cabCfg.map(c => `<div class="io"><div class="grow"><b>${esc(c.id)}</b> · ${esc(c.name)} <span class="sub">· ${esc(c.area)} · ${esc(c.team)} · ${c.source === 'sim' ? 'demo' : 'thật'}</span></div>
+        <button class="btn sm" data-act="cab-edit" data-key="${esc(c.key)}">Sửa</button>${c.source !== 'sim' ? `<button class="btn sm danger" data-act="cab-del" data-key="${esc(c.key)}">Xoá</button>` : ''}</div>`).join('')}
+      <div class="row" style="margin-top:10px"><input id="newCab" class="in" placeholder="Mã tủ thật, VD TU-101" style="width:190px" autocomplete="off"><button class="btn" data-act="cab-add">+ Thêm tủ thật</button></div>
+      <p class="sub">Tủ thật gửi bản tin lên broker sẽ tự xuất hiện; thêm trước để đặt tên, khu vực, tổ phụ trách.</p>
+    </div>
+  </div><div>
+    <div class="panel"><h2>Giả lập sự cố (Demo)</h2>
+      <div class="two"><div class="field"><label for="simCab">Tủ</label><select id="simCab" data-act="sim-cab">${SAMPLE.map(m => `<option value="${m.id}"${m.id === App.simCab ? ' selected' : ''}>${m.id} – ${esc(m.name)}</option>`).join('')}</select></div>
+        <div class="field"><label for="speed">Tốc độ giờ mô phỏng</label><select id="speed" data-act="speed">${[1, 60, 600].map(v => `<option value="${v}"${Clock.speed === v ? ' selected' : ''}>${v}× ${v === 1 ? '(thời gian thực)' : v === 60 ? '(1 giây = 1 phút)' : '(1 giây = 10 phút)'}</option>`).join('')}</select></div></div>
+      <div class="faults">${FAULTS.map(([k, n]) => `<button class="btn${d && simFaultOn(d, k) ? ' on' : ''}" data-act="fault" data-val="${k}">${n}</button>`).join('')}</div>
+      <div class="btns"><button class="btn" data-act="restore">✅ Khôi phục tủ này</button>
+        <button class="btn${App.random ? ' on' : ''}" data-act="random">🎲 Sự cố ngẫu nhiên: ${App.random ? 'BẬT' : 'TẮT'}</button></div>
+      <h3>Nhảy giờ</h3>
+      <div class="btns" style="margin-top:0">${[['17:59:30', '17:59'], ['22:59:30', '22:59 (cắt nửa đêm)'], ['05:29:30', '05:29'], ['12:00:00', '12:00']].map(([v, n]) => `<button class="btn sm" data-act="jump" data-val="${v}">${n}</button>`).join('')}</div>
+      <p class="sub">Thử nhanh: bật "K1 không đóng" rồi nhảy tới 17:59; hoặc vào tủ › Vào/Ra để bật tắt từng kênh.</p>
+    </div>
+    <div class="panel"><div class="row"><h2 class="grow">Bản tin MQTT</h2><button class="btn sm" data-act="console-clear">Xoá</button></div>
+      <p class="sub">Bản tin trao đổi giữa tủ và app: đo lường, cảnh báo (đỏ), lệnh (tím), phản hồi lệnh (vàng).</p>
+      <div class="console" id="console"></div></div>
+    <div class="panel"><h2>Khác</h2><div class="btns" style="margin-top:0">
+      <button class="btn" data-act="sound">${App.sound ? '🔔 Âm báo: BẬT' : '🔕 Âm báo: TẮT'}</button>
+      <button class="btn danger" data-act="reset-inc">Xoá danh sách sự cố</button>
+      <button class="btn danger" data-act="reset-all">Khôi phục cài đặt gốc</button></div></div>
+  </div></div>`;
 }
-function renderFaults(){
-  const d = App.devices[$('#simCab').value]; if (!d) return;
-  $('#faults').innerHTML = FAULTS.map(f => `<button class="btn${faultActive(d, f.k) ? ' on' : ''}" data-f="${f.k}">${f.icon} ${f.label}<small>${f.hint}</small></button>`).join('');
+function editCabModal(key) {
+  const c = App.cabCfg.find(x => x.key === key); if (!c) return;
+  openModal(`<h2>Sửa tủ ${esc(c.id)}</h2>
+    <div class="field"><label for="eName">Tên / vị trí</label><input id="eName" class="in" value="${esc(c.name)}"></div>
+    <div class="two"><div class="field"><label for="eArea">Khu vực</label><input id="eArea" class="in" value="${esc(c.area)}"></div>
+      <div class="field"><label for="eTeam">Tổ phụ trách</label><select id="eTeam" class="in">${App.settings.teams.map(t => `<option${t === c.team ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></div></div>
+    <h3>Tên đầu ra</h3><div class="two">${c.doNames.map((n, i) => `<input class="in eDo" value="${esc(n)}" aria-label="Tên DO${i + 1}">`).join('')}</div>
+    <h3>Tên đầu vào</h3><div class="two">${c.diNames.map((n, i) => `<input class="in eDi" value="${esc(n)}" aria-label="Tên DI${i + 1}">`).join('')}</div>
+    <div class="btns"><button class="btn" id="mNo">Huỷ</button><button class="btn pri" id="mYes">Lưu</button></div>`);
+  $('#mNo').onclick = closeModal;
+  $('#mYes').onclick = () => {
+    c.name = $('#eName').value.trim() || c.name; c.area = $('#eArea').value.trim() || c.area; c.team = $('#eTeam').value;
+    c.doNames = [...document.querySelectorAll('.eDo')].map((e, i) => e.value.trim() || DEF_DO[i]);
+    c.diNames = [...document.querySelectorAll('.eDi')].map((e, i) => e.value.trim() || DEF_DI[i]);
+    App.saveCabs(); closeModal(); render(true); toast('Đã lưu');
+  };
 }
 
-/* ===================== Vòng lặp chính (1 giây) ===================== */
-let randomTimer = 0;
-function loop(){
-  Clock.ms += 1000 * Clock.speed;
-  const d = Clock.date();
-  $('#simTime').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  $('#dayIcon').textContent = isNightAt(d) ? '🌙' : '☀️';
-
-  Object.values(App.devices).forEach(dev => dev.step());
-
-  // Phát hiện mất kết nối phía app (thiết bị im lặng quá lâu)
-  Object.values(App.cabs).forEach(c => { if (c.online && Date.now() - c.lastSeen > CFG.OFFLINE_AFTER_S * 1000) App.markOffline(c, 'Không nhận được dữ liệu quá ' + CFG.OFFLINE_AFTER_S + ' giây'); });
-
-  if (App.random && --randomTimer <= 0){
-    randomTimer = Math.round(rnd(25, 45));
-    const devs = Object.values(App.devices), dev = devs[Math.floor(Math.random() * devs.length)];
-    const pool = ['cutA','cutB','cutC','crash','door','mains','offline'];
-    const k = pool[Math.floor(Math.random() * pool.length)];
-    toggleFault(dev, k, true);
-    setTimeout(() => { toggleFault(dev, k, false); renderFaults(); }, rnd(40, 90) * 1000);
-    renderFaults();
+/* ---------- Biểu đồ ---------- */
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function setupCanvas(cv) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+  return {ctx, w, h};
+}
+function lineChart(id, series, colors, fixedMin) {
+  const cv = document.getElementById(id); if (!cv) return;
+  const {ctx, w, h} = setupCanvas(cv), L = 40, T = 10, B = 18;
+  const all = series.flat().filter(x => x !== null && x !== undefined);
+  let lo = fixedMin ?? (all.length ? Math.min(...all) : 0), hi = all.length ? Math.max(...all) : 1;
+  if (hi - lo < 1) { hi += 1; lo = Math.max(0, lo - 1); }
+  hi += (hi - lo) * 0.1;
+  ctx.font = '11px system-ui'; ctx.fillStyle = cssVar('--muted'); ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1;
+  for (let g = 0; g <= 3; g++) {
+    const y = T + (h - T - B) * g / 3, val = hi - (hi - lo) * g / 3;
+    ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(w - 6, y); ctx.stroke();
+    ctx.fillText(val.toFixed(hi < 10 ? 1 : 0), 4, y + 4);
   }
-  App.render();
-  Bus.flush();
+  ctx.fillText('10 phút trước', L, h - 4); ctx.textAlign = 'right'; ctx.fillText('bây giờ', w - 6, h - 4); ctx.textAlign = 'left';
+  series.forEach((s, k) => {
+    ctx.strokeStyle = colors[k]; ctx.lineWidth = 2; ctx.beginPath(); let started = false;
+    s.forEach((v, n) => {
+      if (v === null || v === undefined) { started = false; return; }
+      const x = L + (w - 6 - L) * n / Math.max(1, CFG.HIST - 1), y = T + (h - T - B) * (1 - (v - lo) / (hi - lo));
+      if (started) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      started = true;
+    });
+    ctx.stroke();
+  });
+}
+function barChart(id, labels, values) {
+  const cv = document.getElementById(id); if (!cv) return;
+  const {ctx, w, h} = setupCanvas(cv), L = 36, T = 16, B = 20;
+  const hi = Math.max(1, ...values) * 1.15, bw = (w - L - 6) / values.length;
+  ctx.font = '11px system-ui'; ctx.fillStyle = cssVar('--muted'); ctx.strokeStyle = cssVar('--line');
+  for (let g = 0; g <= 2; g++) { const y = T + (h - T - B) * g / 2; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(w - 6, y); ctx.stroke(); ctx.fillText((hi - hi * g / 2).toFixed(0), 4, y + 4); }
+  values.forEach((v, n) => {
+    const bh = (h - T - B) * v / hi, x = L + n * bw + bw * 0.18, y = h - B - bh;
+    ctx.fillStyle = n === values.length - 1 ? cssVar('--warn') : cssVar('--accent');
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, bw * 0.64, bh, [4, 4, 0, 0]); else ctx.rect(x, y, bw * 0.64, bh);
+    ctx.fill();
+    if ((values.length - 1 - n) % 2 === 0) { ctx.fillStyle = cssVar('--muted'); ctx.textAlign = 'center'; ctx.fillText(labels[n], x + bw * 0.32, h - 5); ctx.textAlign = 'left'; }
+  });
 }
 
-/* ===================== Sự kiện giao diện ===================== */
-function showView(v){
-  document.querySelectorAll('.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
-  document.querySelectorAll('nav.bottom button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
-  if (v === 'sim') renderFaults();
-  window.scrollTo(0, 0);
+/* =====================================================================
+   10. ĐIỀU HƯỚNG + VẼ
+   ===================================================================== */
+function route() {
+  const p = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
+  if (!p[0]) return {r: 'home', live: true};
+  if (p[0] === 'tu' && p[1]) { const tab = TABS.some(t => t[0] === p[2]) ? p[2] : 'do-luong'; return {r: 'tu', key: p[1], tab, live: tab !== 'lich'}; }
+  if (p[0] === 'tu') return {r: 'tu', live: true};
+  if (p[0] === 'dieu-khien') return {r: 'dieu-khien', live: true};
+  if (p[0] === 'canh-bao') return {r: 'canh-bao', live: false};
+  if (p[0] === 'cai-dat') return {r: 'cai-dat', live: false};
+  return {r: 'home', live: true};
 }
-document.querySelectorAll('nav.bottom button').forEach(b => b.onclick = () => showView(b.dataset.v));
-$('#speed').onchange = e => Clock.speed = +e.target.value;
+let lastRouteKey = null;
+function render(force) {
+  const R = route(), rk = location.hash;
+  const changed = rk !== lastRouteKey;
+  const ae = document.activeElement;
+  const typing = ae && $('#main').contains(ae) && ['INPUT', 'SELECT', 'TEXTAREA'].includes(ae.tagName);
+  const modalOpen = $('#modal').classList.contains('on');
+  const doRender = force || changed || (!typing && !modalOpen && (R.live || (R.r === 'canh-bao' && App.incDirty)));
+  document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.r === R.r));
+  const openN = App.incidents.filter(x => x.status === 'new').length, bd = $('#incBadge');
+  bd.hidden = !openN; bd.textContent = openN;
+  if (!doRender) return;
+  if (R.r === 'canh-bao') App.incDirty = false;
+  const html = R.r === 'home' ? viewHome() : R.r === 'tu' ? (R.key ? viewCab(R.key, R.tab) : viewCabList())
+    : R.r === 'dieu-khien' ? viewControl() : R.r === 'canh-bao' ? viewAlerts() : viewSettings();
+  $('#main').innerHTML = html;
+  if (changed) { window.scrollTo(0, 0); lastRouteKey = rk; }
+  if (R.r === 'tu' && R.key && App.cabs[R.key]) {
+    const cab = App.cabs[R.key], colors = [cssVar('--pa'), cssVar('--pb'), cssVar('--pc')];
+    if (R.tab === 'do-luong') {
+      const fill = arr => Array(Math.max(0, CFG.HIST - arr.length)).fill(null).concat(arr);
+      lineChart('chI', [0, 1, 2].map(k => fill(cab.hist.map(h => h.i[k]))), colors, 0);
+      lineChart('chV', [0, 1, 2].map(k => fill(cab.hist.map(h => h.v[k]))), colors);
+    }
+    if (R.tab === 'dien-nang') {
+      const st = energyStats(R.key, App.nowFor(cab));
+      barChart('chE', st.days.map(d => d.k.slice(8) + '/' + d.k.slice(5, 7)), st.days.map(d => d.v));
+    }
+  }
+  Bus.dirty = true; Bus.flush();
+}
+window.addEventListener('hashchange', () => render(true));
+let resizeT; window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => render(true), 150); });
 
-$('#cabList').onclick = e => {
-  const c = e.target.closest('.cab'); if (!c) return;
-  App.openKey = c.dataset.key; App.renderSheet();
-  $('#sheet').classList.add('on'); $('#sheetBg').classList.add('on');
-};
-function closeSheet(){ App.openKey = null; $('#sheet').classList.remove('on'); $('#sheetBg').classList.remove('on'); }
-$('#sheetBg').onclick = closeSheet;
-$('#sheet').onclick = e => {
-  if (e.target.id === 'sheetClose') return closeSheet();
-  const b = e.target.closest('[data-cmd]'); if (b) App.sendCmd(App.cabs[App.openKey], b.dataset.cmd);
-};
-
-$('#incTabs').onclick = e => {
-  const b = e.target.closest('button'); if (!b) return;
-  App.filter = b.dataset.f; App.incDirty = true;
-  document.querySelectorAll('#incTabs button').forEach(x => x.classList.toggle('on', x === b));
-  App.renderIncs();
-};
-$('#incList').addEventListener('click', e => {
-  const b = e.target.closest('button[data-a]'); if (!b) return;
-  const x = App.incidents.find(i => i.no === b.closest('.inc').dataset.no); if (!x) return;
-  const now = App.nowFor(App.cabs[x.cab] || {source:'sim'});
-  const a = b.dataset.a;
-  if (a === 'zalo'){
-    const txt = App.zaloText(x);
-    (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast('Đã chép – dán vào nhóm Zalo'), () => prompt('Chép nội dung này:', txt));
+/* ---------- Sự kiện ---------- */
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-act]'); if (!el || el.tagName === 'SELECT') return;
+  const a = el.dataset.act, key = el.dataset.key, val = el.dataset.val;
+  if (el.tagName === 'INPUT' && el.type === 'checkbox') {
+    if (a === 'sel') { if (el.checked) App.sel.add(key); else App.sel.delete(key); render(true); }
+    if (a === 'sel-all') { App.visibleCabs().filter(c => !App.area || c.cfg.area === App.area).forEach(c => { if (el.checked) App.sel.add(c.cfg.key); else App.sel.delete(c.cfg.key); }); render(true); }
+    if (a === 'demo') { App.settings.demo = el.checked; App.saveSettings(); if (el.checked) Object.values(App.devices).forEach(d => d.telemetry()); render(true); }
     return;
   }
-  if (a === 'assign'){ x.status = 'assigned'; x.log.push({t: now, s: `Giao cho ${x.team}`}); toast(`${x.no} đã giao cho ${x.team}`); }
-  if (a === 'doing'){ x.status = 'doing'; x.log.push({t: now, s: `${x.team} đang xử lý`}); }
-  if (a === 'done'){
+  e.preventDefault();
+  switch (a) {
+    case 'do': cmdDo(key, +el.dataset.ch, +val); break;
+    case 'all': cmdSimple(key, `all ${val}`, val === '1' ? 'Bật tất cả kênh' : 'Tắt tất cả kênh', true); break;
+    case 'mode-auto': cmdSimple(key, 'mode auto', 'Về tự động theo lịch', true); break;
+    case 'maint': cmdSimple(key, `maint ${val}`, val === '1' ? 'Bật chế độ bảo trì' : 'Kết thúc bảo trì', false); break;
+    case 'status': cmdSimple(key, 'status', 'Đọc lại số liệu', false); break;
+    case 'sched': cmdSched(key, +el.dataset.ch); break;
+    case 'sched-all': cmdSchedAll(key); break;
+    case 'bulk': cmdBulk([...App.sel].filter(k => App.cabs[k] && App.visibleCabs().includes(App.cabs[k])), App.bulkCh, val); break;
+    case 'energy-csv': {
+      const cab = App.cabs[key], e2 = App.energy[key] || {};
+      const rows = Object.keys(e2).sort().map(k => [k, e2[k][0], e2[k][1], (e2[k][1] - e2[k][0]).toFixed(2)]);
+      download(`dien-nang-${cab.cfg.id}.csv`, '\ufeff' + [csvRow(['Ngày', 'Chỉ số đầu ngày', 'Chỉ số cuối', 'Tiêu thụ kWh']), ...rows.map(csvRow)].join('\r\n'), 'text/csv;charset=utf-8');
+      break;
+    }
+    case 'inc-filter': App.incFilter = val; render(true); break;
+    case 'inc': incAction(el.dataset.op, el.dataset.no); break;
+    case 'inc-csv': {
+      const head = ['Mã', 'Thời gian', 'Tủ', 'Tên tủ', 'Khu vực', 'Loại sự cố', 'Pha/Kênh', 'Mức độ', 'Trạng thái', 'Tổ phụ trách', 'Số lần lặp', 'Thiết bị báo hết', 'Ghi chú'];
+      const sev = {3: 'Khẩn', 2: 'Cao', 1: 'Thường'};
+      const rows = App.incidents.map(x => [x.no, fmtTime(x.at), x.tu, x.name, x.area, ALARM[x.code]?.label, x.phases.map(p => phaseLabel(x.code, p)).join(' '), sev[ALARM[x.code]?.sev], STATUS[x.status], x.team, x.count, x.cleared ? 'Có' : 'Không', x.note]);
+      download(`su-co-${dayKey(Date.now())}.csv`, '\ufeff' + [head, ...rows].map(csvRow).join('\r\n'), 'text/csv;charset=utf-8');
+      break;
+    }
+    case 'report': {
+      const r = dailyReport();
+      openModal(`<h2>Báo cáo ngày</h2><pre class="report">${esc(r)}</pre><div class="btns"><button class="btn" id="mNo">Đóng</button><button class="btn pri" id="mYes">📤 Chép báo cáo</button></div>`);
+      $('#mNo').onclick = closeModal; $('#mYes').onclick = () => copyText(r, 'Đã chép báo cáo');
+      break;
+    }
+    case 'mq': mqToggle(); break;
+    case 'pin-set': {
+      const v = $('#pinNew').value.trim();
+      if (!/^\d{4,8}$/.test(v)) { toast('PIN gồm 4–8 chữ số'); break; }
+      App.settings.pinHash = hash(v); App.saveSettings(); App.unlockedUntil = 0; toast('Đã đặt mã PIN'); render(true); break;
+    }
+    case 'pin-clear': if (await confirmAction('Bỏ mã PIN?', 'Lệnh điều khiển sẽ không hỏi PIN nữa.')) { App.settings.pinHash = ''; App.saveSettings(); render(true); } break;
+    case 'teams': { const t = $('#teams').value.split('\n').map(s => s.trim()).filter(Boolean); if (t.length) { App.settings.teams = t; App.saveSettings(); toast('Đã lưu tổ đội'); } break; }
+    case 'cab-edit': editCabModal(key); break;
+    case 'cab-add': {
+      const id = $('#newCab').value.trim().toUpperCase();
+      if (!/^[A-Z0-9_-]{2,20}$/.test(id)) { toast('Mã tủ chỉ gồm chữ, số, - hoặc _'); break; }
+      if (App.cabs['mqtt:' + id]) { toast('Tủ đã có'); break; }
+      App.ensureCab('mqtt', id).online = false; render(true); editCabModal('mqtt:' + id); break;
+    }
+    case 'cab-del': if (await confirmAction('Xoá tủ khỏi danh sách?', esc(key))) { App.cabCfg = App.cabCfg.filter(c => c.key !== key); delete App.cabs[key]; App.sel.delete(key); App.saveCabs(); render(true); } break;
+    case 'fault': { const d = App.devices[App.simCab]; applySimFault(d, val, !simFaultOn(d, val)); render(true); break; }
+    case 'restore': { const d = App.devices[App.simCab]; FAULTS.forEach(([k]) => { if (simFaultOn(d, k)) applySimFault(d, k, false); }); toast('Đã khôi phục ' + App.simCab); render(true); break; }
+    case 'random': App.random = !App.random; App.randomTimer = 3; render(true); break;
+    case 'jump': Clock.jump(val); toast('Đã nhảy tới ' + val.slice(0, 5)); break;
+    case 'console-clear': Bus.lines = []; Bus.dirty = true; Bus.flush(); break;
+    case 'sound':
+      App.sound = !App.sound;
+      if (App.sound && !App.ac) { try { App.ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (err) { /* không hỗ trợ âm thanh */ } }
+      render(true); break;
+    case 'reset-inc':
+      if (await confirmAction('Xoá toàn bộ danh sách sự cố?', 'Không khôi phục được.', 'Xoá')) {
+        App.incidents = []; App.seq = 0; App.saveInc();
+        Object.values(App.cabs).forEach(c => { c.active = {}; });
+        Object.values(App.devices).forEach(d => Object.values(d.alarms).forEach(x => { x.active = false; x.cnt = 0; }));
+        render(true);
+      }
+      break;
+    case 'reset-all':
+      if (await confirmAction('Khôi phục cài đặt gốc?', 'Xoá tủ đã thêm, sự cố, điện năng, PIN, cài đặt kết nối trên máy này.', 'Khôi phục')) {
+        ['gst.settings', 'gst.cabs', 'gst.inc', 'gst.seq', 'gst.energy'].forEach(k => { try { localStorage.removeItem(k); } catch (err) { /* bỏ qua */ } });
+        location.reload();
+      }
+      break;
+  }
+});
+document.addEventListener('change', e => {
+  const el = e.target, a = el.dataset.act;
+  if (a === 'area') { App.area = el.value; el.blur(); render(true); }
+  if (a === 'bulk-ch') { App.bulkCh = el.value; el.blur(); }
+  if (a === 'sim-cab') { App.simCab = el.value; el.blur(); render(true); }
+  if (a === 'speed') { Clock.speed = +el.value; el.blur(); }
+  if (a === 'inc-team') {
+    const x = App.incidents.find(i => i.no === el.dataset.no); if (!x) return;
+    x.team = el.value; x.log.push({t: App.nowFor(App.cabs[x.cab]), s: `Đổi tổ phụ trách: ${x.team}`}); App.saveInc(); el.blur();
+  }
+});
+function incAction(op, no) {
+  const x = App.incidents.find(i => i.no === no); if (!x) return;
+  const now = App.nowFor(App.cabs[x.cab]);
+  if (op === 'zalo') { copyText(zaloText(x), 'Đã chép – dán vào nhóm Zalo'); return; }
+  if (op === 'assign') { x.status = 'assigned'; x.log.push({t: now, s: `Giao cho ${x.team}`}); toast(`${x.no} đã giao cho ${x.team}`); }
+  if (op === 'doing') { x.status = 'doing'; x.log.push({t: now, s: `${x.team} đang xử lý`}); }
+  if (op === 'done') {
     const note = prompt('Ghi chú kết quả xử lý (VD: đã nối lại 30m cáp, đã báo CA phường):', x.note || '');
     if (note === null) return;
     x.note = note; x.status = 'done'; x.log.push({t: now, s: `Hoàn thành${note ? ': ' + note : ''}`});
   }
-  if (a === 'reopen'){ x.status = 'assigned'; x.log.push({t: now, s: 'Mở lại'}); }
-  App.save(); App.incDirty = true; App.render();
-});
-$('#incList').addEventListener('change', e => {
-  if (e.target.dataset.a !== 'team') return;
-  const x = App.incidents.find(i => i.no === e.target.closest('.inc').dataset.no); if (!x) return;
-  x.team = e.target.value; x.log.push({t: App.nowFor(App.cabs[x.cab] || {source:'sim'}), s: `Đổi tổ phụ trách: ${x.team}`});
-  App.save();
-});
-
-$('#btnCsv').onclick = () => App.csv();
-$('#btnReport').onclick = () => {
-  App.openKey = null;
-  const r = App.report();
-  $('#sheet').innerHTML = `<div class="row"><h2 class="grow" style="margin:0">Báo cáo trong ngày</h2><button class="btn sm" id="sheetClose">Đóng</button></div>
-    <pre class="report">${esc(r)}</pre><div class="btns"><button class="btn pri" id="copyRep">📤 Chép báo cáo</button></div>`;
-  $('#copyRep').onclick = () => (navigator.clipboard ? navigator.clipboard.writeText(r) : Promise.reject()).then(() => toast('Đã chép báo cáo'), () => prompt('Chép:', r));
-  $('#sheet').classList.add('on'); $('#sheetBg').classList.add('on');
-};
-
-$('#simCab').innerHTML = SAMPLE.map(m => `<option value="${m.id}">${m.id} – ${esc(m.name)}</option>`).join('');
-$('#simCab').onchange = renderFaults;
-$('#faults').onclick = e => {
-  const b = e.target.closest('[data-f]'); if (!b) return;
-  const d = App.devices[$('#simCab').value]; toggleFault(d, b.dataset.f);
-  renderFaults();
-};
-$('#btnRestore').onclick = () => { restore(App.devices[$('#simCab').value]); renderFaults(); toast('Đã khôi phục tủ về bình thường'); };
-$('#btnRandom').onclick = e => { App.random = !App.random; randomTimer = 3; e.target.textContent = `🎲 Sự cố ngẫu nhiên: ${App.random ? 'BẬT' : 'TẮT'}`; e.target.classList.toggle('on', App.random); };
-document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => { Clock.jump(b.dataset.jump); toast('Đã nhảy tới ' + b.dataset.jump.slice(0, 5) + ' – đặt tốc độ 60× để xem chuyển giờ'); });
-$('#btnClear').onclick = () => { Bus.lines = []; Bus.dirty = true; Bus.flush(); };
-$('#btnSound').onclick = e => {
-  App.sound = !App.sound;
-  if (App.sound && !App.ac){ try { App.ac = new (window.AudioContext || window.webkitAudioContext)(); } catch(err){} }
-  e.target.textContent = App.sound ? '🔔 Âm báo: BẬT' : '🔕 Âm báo: TẮT';
-};
-$('#btnReset').onclick = () => {
-  if (!confirm('Xoá toàn bộ danh sách sự cố đã lưu?')) return;
-  App.incidents = []; App.seq = 0;
-  Object.values(App.cabs).forEach(c => c.active = {});
-  Object.values(App.devices).forEach(d => Object.values(d.alarms).forEach(a => { a.active = false; a.cnt = 0; }));
-  App.save(); App.incDirty = true; App.render();
-};
-
-/* ---------- MQTT thật (Wokwi / ESP32) ---------- */
-function loadScript(src){
-  return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = fail; document.head.appendChild(s); });
+  if (op === 'reopen') { x.status = 'assigned'; x.log.push({t: now, s: 'Mở lại'}); }
+  App.saveInc(); render(true);
 }
-$('#btnMq').onclick = async () => {
-  const st = $('#mqState');
-  if (App.mq){ App.mq.end(true); App.mq = null; st.textContent = 'Đã ngắt'; $('#btnMq').textContent = 'Kết nối'; return; }
+
+/* ---------- MQTT thật ---------- */
+function loadScript(src) { return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = fail; document.head.appendChild(s); }); }
+function setMq(state) { App.mqState = state; updateHeader(); if (route().r === 'cai-dat') render(true); }
+async function mqToggle() {
+  if (App.mq) { App.mq.end(true); App.mq = null; setMq('off'); return; }
+  const mq = App.settings.mq;
+  if ($('#mqUrl')) { mq.url = $('#mqUrl').value.trim(); mq.root = $('#mqRoot').value.trim(); mq.user = $('#mqUser').value; mq.pass = $('#mqPass').value; mq.auto = $('#mqAuto').checked; App.saveSettings(); }
   try {
-    st.textContent = 'Đang tải thư viện…';
+    setMq('loading');
     if (!window.mqtt) await loadScript('https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js');
+    setMq('connecting');
     const root = App.root();
-    st.textContent = 'Đang kết nối…';
-    App.mq = mqtt.connect($('#mqUrl').value.trim(), {clientId: 'web-' + Math.random().toString(16).slice(2, 10), reconnectPeriod: 5000, connectTimeout: 10000});
-    App.mq.on('connect', () => { App.mq.subscribe(root + '/tu/+/+'); st.textContent = `Đã kết nối · nghe ${root}/tu/+/…`; $('#btnMq').textContent = 'Ngắt'; });
-    App.mq.on('message', (topic, buf) => {
-      if (topic.endsWith('/cmd')) return;
-      const text = buf.toString(); Bus.log(topic, text); App.onMessage(topic, text, 'mqtt');
-    });
-    App.mq.on('error', err => st.textContent = 'Lỗi: ' + err.message);
-    App.mq.on('offline', () => st.textContent = 'Mất kết nối broker, đang thử lại…');
-  } catch(err){ st.textContent = 'Không tải được thư viện MQTT (kiểm tra mạng)'; App.mq = null; }
-};
+    App.mq = window.mqtt.connect(mq.url, {clientId: 'app-' + Math.random().toString(16).slice(2, 10), username: mq.user || undefined, password: mq.pass || undefined, reconnectPeriod: 5000, connectTimeout: 10000});
+    App.mq.on('connect', () => { App.mq.subscribe(root + '/tu/+/+'); setMq('on'); });
+    App.mq.on('message', (topic, buf) => { const text = buf.toString(); Bus.log(topic, text); App.onMessage(topic, text, 'mqtt'); });
+    App.mq.on('error', () => setMq('err'));
+    App.mq.on('offline', () => setMq('retry'));
+  } catch (err) { App.mq = null; setMq('err'); toast('Không tải được thư viện MQTT (kiểm tra mạng)'); }
+}
+function updateHeader() {
+  const dot = $('#connDot'), txt = $('#connTxt');
+  if (App.mq && App.mqState === 'on') { dot.className = 'dot ok'; txt.textContent = 'MQTT'; }
+  else if (App.mq) { dot.className = 'dot warn'; txt.textContent = 'MQTT…'; }
+  else { dot.className = 'dot' + (App.settings.demo ? ' ok' : ''); txt.textContent = App.settings.demo ? 'Demo' : 'Ngoại tuyến'; }
+  $('#clockChip').style.display = App.settings.demo ? '' : 'none';
+  $('#hsub').textContent = App.settings.demo ? 'App cá nhân · đang chạy Demo' : 'App cá nhân';
+}
+
+/* =====================================================================
+   11. VÒNG LẶP 1 GIÂY
+   ===================================================================== */
+let energySaveTick = 0;
+function loop() {
+  if (App.settings.demo) {
+    Clock.ms += 1000 * Clock.speed;
+    const d = new Date(Clock.ms);
+    $('#simTime').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    $('#dayIcon').textContent = inWindow(Clock.min(), 1080, 330) ? '🌙' : '☀️';
+    Object.values(App.devices).forEach(dev => dev.step());
+    if (App.random && --App.randomTimer <= 0) {
+      App.randomTimer = Math.round(rnd(25, 45));
+      const devs = Object.values(App.devices), dev = devs[Math.floor(Math.random() * devs.length)];
+      const pool = ['cutA', 'cutB', 'cutC', 'crash', 'door', 'mains', 'offline', 'kfail1', 'cbTrip'];
+      const k = pool[Math.floor(Math.random() * pool.length)];
+      applySimFault(dev, k, true);
+      setTimeout(() => applySimFault(dev, k, false), rnd(40, 90) * 1000);
+    }
+  }
+  const now = Date.now();
+  App.visibleCabs().forEach(c => {
+    Object.keys(c.active).forEach(k => { if (c.active[k].exp && c.active[k].exp < now) delete c.active[k]; });
+    if (c.online && c.tele && now - c.lastSeen > CFG.OFFLINE_AFTER_S * 1000) App.markOffline(c, `Không nhận được dữ liệu quá ${CFG.OFFLINE_AFTER_S} giây`);
+  });
+  if (App.energyDirty && ++energySaveTick >= 30) { energySaveTick = 0; App.energyDirty = false; App.saveEnergy(); }
+  updateHeader();
+  render(false);
+  Bus.flush();
+}
 
 /* ---------- Khởi động ---------- */
 App.init();
-loop();
+updateHeader();
+render(true);
 setInterval(loop, 1000);
-window.addEventListener('resize', () => App.openKey && App.drawChart(App.cabs[App.openKey]));
+if (App.settings.mq.auto) mqToggle();
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
 </html>
