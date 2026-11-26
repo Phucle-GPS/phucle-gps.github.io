@@ -800,7 +800,7 @@ function viewHome() {
   const order = {bad: 0, warn: 1, off: 2, ok: 3};
   const attn = cabs.filter(c => App.cabState(c) !== 'ok').sort((a, b) => order[App.cabState(a)] - order[App.cabState(b)]);
   const okCabs = cabs.filter(c => App.cabState(c) === 'ok');
-  return `<h1>Tổng quan</h1>
+  return `<div class="row" style="margin-bottom:12px"><h1 class="grow" style="margin:0">Tổng quan</h1><a class="btn sm" href="ban-do-chieu-sang.html">🗺️ Bản đồ 3D + SCADA + Đào tạo</a></div>
     <div class="kpis">
       <div class="kpi"><span>Tủ trực tuyến</span><b>${online}<small>/ ${cabs.length}</small></b></div>
       <div class="kpi"><span>Tủ đang sáng</span><b>${lit}</b></div>

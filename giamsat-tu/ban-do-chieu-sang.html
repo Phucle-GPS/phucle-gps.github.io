@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bản đồ chiếu sáng 3D</title>
+<meta name="description" content="Mô hình 3D lưới chiếu sáng đường phố kèm màn hình SCADA và bài tập đào tạo vận hành – một file HTML.">
+<meta name="theme-color" content="#0f1720">
+<style>
+:root{
+  --bg:#0c131b; --panel:#121c27; --panel2:#182533; --line:#24384b; --ink:#d8e6f2; --muted:#7f97ad;
+  --cyan:#36c5f0; --amber:#f5a524; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --mag:#e879f9; --off:#5b6b7b;
+  --pa:#ff7a52; --pb:#f2c53d; --pc:#5e9bff;
+}
+:root[data-theme="light"]{ --bg:#e9eef3; --panel:#ffffff; --panel2:#f3f6f9; --line:#d3dde6; --ink:#15212d; --muted:#5c6f80; }
+@media (prefers-color-scheme: light){ :root:not([data-theme="dark"]){ --bg:#0c131b; } }
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;overflow:hidden}
+button,select,input{font:inherit;color:inherit}
+a{color:var(--cyan)}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+
+/* ---------- Khung ---------- */
+header{height:52px;display:flex;align-items:center;gap:10px;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.brand{flex:1;min-width:0}
+.brand b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand small{display:block;color:var(--muted);font-size:11.5px;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:8px;font-weight:600;font-size:13px;white-space:nowrap}
+.chip select{background:transparent;border:0;font-weight:600;cursor:pointer;color:var(--ink)}
+.chip select option{background:var(--panel)}
+#layout{position:absolute;top:52px;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr minmax(440px,1fr)}
+#pane3d{position:relative;min-width:0;min-height:0}
+#paneSide{display:flex;flex-direction:column;min-width:0;min-height:0;border-left:1px solid var(--line);background:var(--panel)}
+.tabs{display:flex;border-bottom:1px solid var(--line);background:var(--panel2)}
+.tabs button{flex:1;border:0;background:transparent;padding:10px 6px;font-weight:700;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;position:relative}
+.tabs button.on{color:var(--cyan);border-bottom-color:var(--cyan)}
+.cnt[hidden]{display:none!important}
+.cnt{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;margin-left:4px}
+.view{display:none;flex:1;overflow:auto;padding:12px;min-height:0}
+.view.on{display:block}
+nav.mob{display:none}
+@media (max-width:899px){
+  #layout{grid-template-columns:1fr;bottom:calc(56px + env(safe-area-inset-bottom))}
+  #paneSide{border-left:0}
+  #paneSide .tabs{display:none}
+  body.m-3d #paneSide{display:none} body:not(.m-3d) #pane3d{display:none}
+  nav.mob{display:flex;position:fixed;left:0;right:0;bottom:0;height:calc(56px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--panel);border-top:1px solid var(--line);z-index:20}
+  nav.mob button{flex:1;border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:600;position:relative}
+  nav.mob button b{display:block;font-size:19px}
+  nav.mob button.on{color:var(--cyan)}
+  nav.mob .cnt{position:absolute;top:4px;left:calc(50% + 6px)}
+  .hide-m{display:none}
+}
+
+/* ---------- 3D ---------- */
+#c3d{position:absolute;inset:0}
+#c3d canvas{display:block;width:100%;height:100%;touch-action:none}
+.ov{position:absolute;z-index:5}
+.legend3d{white-space:nowrap;left:10px;top:10px;background:rgba(10,16,24,.78);border:1px solid var(--line);border-radius:10px;padding:7px 10px;font-size:11.5px;color:#cfe0ee;max-width:calc(100% - 20px)}
+.legend3d i{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 4px 0 8px;vertical-align:-1px}
+.legend3d i:first-child{margin-left:0}
+.tools3d{left:10px;top:48px;display:flex;flex-wrap:wrap;gap:6px}
+.tools3d button{background:rgba(10,16,24,.82);border:1px solid var(--line);color:#dbe9f5;border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:600;cursor:pointer;text-align:left}
+.tools3d button.on{border-color:var(--cyan);color:var(--cyan)}
+.info3d{left:10px;bottom:52px;width:min(380px,calc(100% - 20px));background:rgba(12,19,27,.94);border:1px solid var(--line);border-radius:12px;padding:10px 12px;color:#dbe9f5;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.hint3d{right:10px;bottom:52px;font-size:11px;color:#9bb0c3;background:rgba(10,16,24,.7);padding:4px 8px;border-radius:7px;pointer-events:none}
+@media (max-width:899px){.hint3d{display:none}}
+.loading3d{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+
+/* ---------- Thành phần ---------- */
+.btn{border:1px solid var(--line);background:var(--panel2);border-radius:8px;padding:6px 11px;cursor:pointer;font-weight:600;font-size:13px;display:inline-flex;align-items:center;gap:5px}
+.btn:hover{border-color:var(--cyan)}
+.btn.pri{background:var(--cyan);border-color:var(--cyan);color:#06202c}
+.btn.ok{background:#0f5132;border-color:var(--ok);color:#d1fae5}
+.btn.danger{border-color:var(--bad);color:var(--bad)}
+.btn.sm{padding:4px 8px;font-size:12px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.sub{color:var(--muted);font-size:12.5px}
+h2{font-size:15px;margin:0 0 8px}
+h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.pill{display:inline-block;padding:1px 7px;border-radius:6px;font-size:11.5px;font-weight:700;background:#223142;color:var(--muted)}
+.pill.ok{background:#0f3b2b;color:var(--ok)}.pill.bad{background:#47191c;color:var(--bad)}.pill.warn{background:#43340e;color:var(--warn)}.pill.cy{background:#0d3344;color:var(--cyan)}
+
+/* ---------- SCADA ---------- */
+#scada svg{width:100%;height:auto;display:block;background:#0b1219;border:1px solid var(--line);border-radius:10px}
+#scada text{font-family:ui-monospace,Menlo,Consolas,monospace;fill:#b9cde0}
+.s-lbl{font-size:17px}.s-tag{font-size:19px;font-weight:700;fill:#e6f2fb!important}.s-val{font-size:17px;fill:#7ee0ff!important}.s-mut{font-size:15px;fill:#8aa2b8!important}
+.click{cursor:pointer}
+.click:hover>*{filter:brightness(1.35)}
+.blink{animation:blink 1s steps(2,start) infinite}
+@keyframes blink{50%{opacity:.25}}
+.slegend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--muted);margin:8px 2px}
+.slegend i{display:inline-block;width:18px;height:4px;border-radius:2px;margin-right:5px;vertical-align:middle}
+
+/* ---------- Cảnh báo ---------- */
+table.al{width:100%;border-collapse:collapse;font-size:12.5px}
+table.al th{text-align:left;color:var(--muted);font-weight:600;padding:6px 5px;border-bottom:1px solid var(--line);font-size:11.5px}
+table.al td{padding:7px 5px;word-break:normal;border-bottom:1px solid var(--line);vertical-align:top}
+tr.p3 td:first-child{border-left:4px solid var(--bad)}tr.p2 td:first-child{border-left:4px solid var(--warn)}tr.p1 td:first-child{border-left:4px solid var(--cyan)}
+tr.unack.act{background:rgba(248,113,113,.12);animation:rowb 1s steps(2,start) infinite}
+tr.unack.clr{background:rgba(52,211,153,.08)}
+@keyframes rowb{50%{background:rgba(248,113,113,.03)}}
+#banner{position:absolute;left:0;right:0;bottom:0;z-index:6;display:none;align-items:center;gap:8px;padding:7px 12px;background:rgba(71,25,28,.95);border-top:1px solid var(--bad);color:#ffe1e1;font-size:13px}
+#banner.on{display:flex}
+
+/* ---------- Đào tạo ---------- */
+.scen{cursor:pointer}
+.scen:hover{border-color:var(--cyan)}
+.step{display:flex;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.step b{width:22px;flex:none;text-align:center}
+.score{font-size:34px;font-weight:800;color:var(--cyan)}
+.msg{background:#0d2a38;border:1px solid #1d5873;border-radius:9px;padding:8px 10px;margin:8px 0;font-size:13px}
+
+/* ---------- Faceplate ---------- */
+#fpBg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40;display:none}
+#fp{position:fixed;z-index:41;left:50%;top:50%;transform:translate(-50%,-50%);width:min(400px,calc(100% - 24px));max-height:86vh;overflow:auto;background:var(--panel);border:1px solid var(--cyan);border-radius:12px;padding:14px;display:none;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+#fp.on,#fpBg.on{display:block}
+.fp-h{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:10px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px}
+.kv span{color:var(--muted)}
+.toast{position:fixed;left:50%;top:62px;transform:translateX(-50%);z-index:60;background:#0f2433;border:1px solid var(--cyan);color:#dff4ff;padding:9px 14px;border-radius:10px;font-size:13.5px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:min(92vw,560px)}
+.toast.on{opacity:1}
+</style>
+</head>
+<body class="m-3d">
+
+<header>
+  <div class="brand"><b>Bản đồ chiếu sáng 3D + SCADA</b><small class="mono">CS-MAP-01 · KHU VỰC A · <span id="modeTxt">VẬN HÀNH</span></small></div>
+  <div class="chip mono" title="Giờ mô phỏng"><span id="dayIco">🌙</span><span id="clk">--:--</span>
+    <select id="speed" aria-label="Tốc độ thời gian"><option value="1">1×</option><option value="30" selected>30×</option><option value="300">300×</option></select></div>
+  <a class="chip hide-m" href="./" title="Về app điều khiển tủ">↩ App</a>
+</header>
+
+<div id="layout">
+  <section id="pane3d">
+    <div id="c3d"><div class="loading3d">Đang tải mô hình 3D…</div></div>
+    <div class="ov legend3d"><i style="background:#36c5f0"></i>Nguồn<i style="background:#f5a524"></i>Cáp đèn<i style="background:#ffe9a6"></i>Đèn sáng<i style="background:#f87171"></i>Sự cố</div>
+    <div class="ov tools3d">
+      <button data-act="home">🎯 Toàn cảnh</button>
+      <button data-act="flow" id="bFlow" class="on">⚡ Dòng điện</button>
+      <button data-act="fog" id="bFog">🌫️ Che hiện trường</button>
+    </div>
+    <div class="ov info3d" id="info3d" hidden></div>
+    <div class="ov hint3d">Kéo: xoay · Chuột phải / 2 ngón: di chuyển · Lăn / chụm: phóng · Chạm: chọn</div>
+    <div id="banner"></div>
+  </section>
+
+  <section id="paneSide">
+    <div class="tabs">
+      <button data-tab="scada" class="on">📟 SCADA</button>
+      <button data-tab="alarm">🚨 Cảnh báo<span class="cnt" id="cntA" hidden>0</span></button>
+      <button data-tab="train">🎓 Đào tạo</button>
+    </div>
+    <div class="view on" id="v-scada"><div id="scada"></div></div>
+    <div class="view" id="v-alarm"></div>
+    <div class="view" id="v-train"></div>
+  </section>
+</div>
+
+<nav class="mob">
+  <button data-m="3d" class="on"><b>🗺️</b>3D</button>
+  <button data-m="scada"><b>📟</b>SCADA</button>
+  <button data-m="alarm"><b>🚨</b>Cảnh báo<span class="cnt" id="cntM" hidden>0</span></button>
+  <button data-m="train"><b>🎓</b>Đào tạo</button>
+</nav>
+
+<div id="fpBg"></div>
+<div id="fp" role="dialog" aria-modal="true"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   1. DỮ LIỆU MẠNG (tương đương "bản vẽ P&ID")
+   Sửa phần này theo bản vẽ tuyến thật: vị trí TBA, tủ, đường, số cột.
+   Mọi thứ khác (3D, SCADA, mô phỏng điện, cảnh báo) tự dựng từ đây.
+   Đơn vị toạ độ: 1 = 3,3 m
+   ===================================================================== */
+const M_PER_UNIT = 3.3, LAMP_A = 0.68;            // đèn LED 150 W ≈ 0,68 A
+const ROADS = [
+  {name: 'Đại lộ A', a: [-36, 0], b: [36, 0]},
+  {name: 'Đường B', a: [-36, -18], b: [36, -18]},
+  {name: 'Đường 1', a: [-20, -30], b: [-20, 14]},
+  {name: 'Đường 2', a: [4, -30], b: [4, 14]},
+  {name: 'Đường 3', a: [24, -30], b: [24, 14]}
+];
+const NET = {
+  tba: {id: 'TBA', name: 'TBA Khu A 22/0,4 kV – 250 kVA', pos: [-29, 8]},
+  cabs: [
+    {id: 'TU-01', name: 'Ngã tư Đại lộ A – Đường 1', pos: [-23, 3.6], feeder: [[-28, 6.4], [-28, 4.6], [-23, 4.6]],
+      routes: [
+        {id: 'R1', ch: 0, name: 'Đại lộ A (đoạn Tây)', path: [[-21.6, 2.2], [2.4, 2.2]], n: 7},
+        {id: 'R2', ch: 1, name: 'Đường 1', path: [[-17.8, -1.2], [-17.8, -16.8]], n: 5}]},
+    {id: 'TU-02', name: 'Ngã tư Đại lộ A – Đường 2', pos: [7.4, 3.6], feeder: [[-28, 6.4], [-28, 5.2], [7.4, 5.2]],
+      routes: [
+        {id: 'R3', ch: 0, name: 'Đại lộ A (đoạn Đông)', path: [[8.8, 2.2], [34, 2.2]], n: 7},
+        {id: 'R4', ch: 1, name: 'Đường 2', path: [[6.2, -1.2], [6.2, -16.8]], n: 5}]},
+    {id: 'TU-03', name: 'Ngã tư Đường B – Đường 3', pos: [21.6, -21.4], feeder: [[-28, 6.4], [-31, 6.4], [-31, -22.6], [21.6, -22.6]],
+      routes: [
+        {id: 'R5', ch: 0, name: 'Đường B', path: [[20.4, -20.2], [-34, -20.2]], n: 13},
+        {id: 'R6', ch: 1, name: 'Đường 3', path: [[25.8, -16.8], [25.8, -1.2]], n: 5}]}
+  ]
+};
+const CH_NAME = ['K1 · Cả đêm', 'K2 · Nửa đêm'];
+const SCHED = [[18 * 60, 5 * 60 + 30], [18 * 60, 23 * 60]];
+const TEAMS = ['Tổ 1', 'Tổ 2', 'Tổ 3', 'Tổ trực đêm'];
+const ROUTES = {}; NET.cabs.forEach(c => c.routes.forEach(r => { r.cab = c.id; ROUTES[r.id] = r; }));
+
+// Vị trí cột: chia đều theo chiều dài tuyến
+function polyLen(p) { let L = 0; for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return L; }
+function polyAt(p, d) {
+  for (let i = 1; i < p.length; i++) {
+    const s = Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+    if (d <= s || i === p.length - 1) { const t = Math.min(1, d / s); return [p[i - 1][0] + (p[i][0] - p[i - 1][0]) * t, p[i - 1][1] + (p[i][1] - p[i - 1][1]) * t]; }
+    d -= s;
+  }
+  return p[p.length - 1];
+}
+Object.values(ROUTES).forEach(r => {
+  const cab = NET.cabs.find(c => c.id === r.cab), L = polyLen(r.path);
+  r.posts = Array.from({length: r.n}, (_, i) => polyAt(r.path, L * (i + 0.5) / r.n));
+  // khoảng cách theo cáp từ tủ tới từng cột (m)
+  const lead = Math.hypot(r.path[0][0] - cab.pos[0], r.path[0][1] - cab.pos[1]);
+  r.distM = r.posts.map((_, i) => Math.round((lead + L * (i + 0.5) / r.n) * M_PER_UNIT));
+});
+
+/* =====================================================================
+   2. TIỆN ÍCH
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const pad = n => String(n).padStart(2, '0');
+const rnd = (a, b) => a + Math.random() * (b - a);
+const rint = (a, b) => Math.floor(rnd(a, b + 1));
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const num = (v, d = 1) => (v === null || v === undefined || Number.isNaN(v)) ? '—' : Number(v).toFixed(d);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* bỏ qua */ } }
+};
+function toast(m, ms = 3600) { const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), ms); }
+function loadScript(src) { return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = fail; document.head.appendChild(s); }); }
+
+const Clock = {
+  ms: (() => { const d = new Date(); d.setHours(18, 40, 0, 0); return d.getTime(); })(),
+  speed: 30,
+  min() { const d = new Date(this.ms); return d.getHours() * 60 + d.getMinutes(); },
+  set(h, m, s = 0) { const d = new Date(this.ms); d.setHours(h, m, s, 0); this.ms = d.getTime(); },
+  txt(ms = this.ms) { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; },
+  night() { const m = this.min(); return m >= 17 * 60 + 45 || m < 6 * 60; }
+};
+const inWin = (m, on, off) => on > off ? (m >= on || m < off) : (m >= on && m < off);
+
+/* =====================================================================
+   3. MÔ PHỎNG ĐIỆN
+   ===================================================================== */
+let S, tick = 0;
+function initState() {
+  S = {grid: true, cabs: {}};
+  NET.cabs.forEach(c => {
+    S.cabs[c.id] = {cb: true, door: false, mode: 'auto', remote: [false, false], k: [false, false], fb: [false, false],
+      kfail: [false, false], kstuck: [false, false], changed: -99, V: [0, 0, 0], I: [0, 0, 0],
+      routes: Object.fromEntries(c.routes.map(r => [r.id, {cb: true, cut: null, fails: new Set(), down: null, I: [0, 0, 0], lit: [], segI: [], energ: false}]))};
+  });
+}
+function step() {
+  tick++;
+  const m = Clock.min();
+  NET.cabs.forEach(c => {
+    const cs = S.cabs[c.id];
+    const v = [0, 1, 2].map(() => S.grid ? 228 + rnd(-2, 2) : 0);
+    const powered = S.grid && cs.cb;
+    for (let ch = 0; ch < 2; ch++) {
+      const want = cs.mode === 'auto' ? inWin(m, SCHED[ch][0], SCHED[ch][1]) : cs.remote[ch];
+      if (want !== cs.k[ch]) { cs.k[ch] = want; cs.changed = tick; }
+      cs.fb[ch] = (cs.k[ch] || cs.kstuck[ch]) && !cs.kfail[ch];
+    }
+    cs.V = powered ? v : [0, 0, 0];
+    cs.I = [0, 0, 0];
+    c.routes.forEach(r => {
+      const rs = cs.routes[r.id];
+      let energ = powered && cs.fb[r.ch] && rs.cb;
+      if (energ && rs.down !== null) { rs.cb = false; energ = false; rs.tripped = tick; }   // cột đổ chạm đất → ngắn mạch → nhảy CB nhánh
+      rs.energ = energ;
+      rs.I = [0, 0, 0]; rs.lit = []; rs.pw = [];
+      for (let i = 0; i < r.n; i++) {
+        const pw = energ && (rs.cut === null || i < rs.cut);
+        const lit = pw && !rs.fails.has(i) && rs.down !== i;
+        rs.pw[i] = pw; rs.lit[i] = lit;
+        if (lit) rs.I[i % 3] += LAMP_A * (1 + rnd(-0.02, 0.02));
+      }
+      rs.segI = rs.lit.map((_, j) => rs.lit.slice(j).filter(Boolean).length * LAMP_A);
+      for (let k = 0; k < 3; k++) cs.I[k] += rs.I[k];
+    });
+  });
+  detect();
+}
+
+/* =====================================================================
+   4. CẢNH BÁO (SCADA chỉ dùng số đo: U, I từng lộ, trạng thái CB/K/cửa)
+   ===================================================================== */
+const PRIO = {3: 'Khẩn', 2: 'Cao', 1: 'Thấp'};
+let ALARMS = {}, HIST = [], deb = {};
+// Cảnh báo cần người ra hiện trường: giữ lại (kể cả khi đã hết) tới lúc giao tổ
+const FIELD = new Set(['CAT_CAP', 'MAT_DIEN_TUYEN', 'CB_NHANH', 'HONG_BONG', 'K_KHONG_DONG', 'K_KHONG_CAT', 'CB_TONG', 'MO_CUA']);
+function maybeRemove(a) { if (a && !a.active && a.acked && (!FIELD.has(a.code) || a.team)) delete ALARMS[a.key]; }
+function setAlarm(key, cond, def) {
+  if (cond) {
+    deb[key] = (deb[key] || 0) + 1;
+    if (deb[key] < 2) return;
+    const a = ALARMS[key];
+    if (!a) {
+      ALARMS[key] = Object.assign({key, active: true, acked: false, tOn: Clock.ms, team: null}, def);
+      HIST.unshift({t: Clock.ms, s: `▲ ${def.tag} ${def.msg}`});
+      onNewAlarm(ALARMS[key]);
+    } else {
+      if (!a.active) { a.active = true; a.acked = false; a.tOn = Clock.ms; HIST.unshift({t: Clock.ms, s: `▲ ${def.tag} ${def.msg}`}); onNewAlarm(a); }
+      a.msg = def.msg; a.extra = def.extra;
+    }
+  } else {
+    deb[key] = 0;
+    const a = ALARMS[key];
+    if (a && a.active) {
+      a.active = false; a.tOff = Clock.ms;
+      HIST.unshift({t: Clock.ms, s: `▽ ${a.tag} hết: ${a.label}`});
+      maybeRemove(a);
+    }
+  }
+  if (HIST.length > 300) HIST.length = 300;
+}
+function detect() {
+  setAlarm('TBA/MAT_DIEN', !S.grid, {tag: 'TBA', code: 'MAT_DIEN_LUOI', prio: 2, label: 'Mất điện lưới', msg: 'Mất điện lưới – toàn khu vực mất nguồn'});
+  NET.cabs.forEach(c => {
+    const cs = S.cabs[c.id], settled = tick - cs.changed > 3;
+    setAlarm(c.id + '/CB', !cs.cb, {tag: c.id, code: 'CB_TONG', prio: 3, label: 'Nhảy CB tổng', msg: 'CB tổng bị cắt / nhảy'});
+    setAlarm(c.id + '/DOOR', cs.door, {tag: c.id, code: 'MO_CUA', prio: 3, label: 'Mở cửa tủ', msg: 'Cửa tủ mở ngoài giờ bảo trì'});
+    for (let ch = 0; ch < 2; ch++) {
+      setAlarm(`${c.id}/KD${ch}`, S.grid && cs.cb && cs.k[ch] && !cs.fb[ch], {tag: `${c.id}.K${ch + 1}`, code: 'K_KHONG_DONG', prio: 2, label: 'Contactor không đóng', ch, msg: `${CH_NAME[ch]}: đã ra lệnh đóng nhưng không có phản hồi`});
+      setAlarm(`${c.id}/KC${ch}`, S.grid && cs.cb && !cs.k[ch] && cs.fb[ch], {tag: `${c.id}.K${ch + 1}`, code: 'K_KHONG_CAT', prio: 2, label: 'Contactor dính', ch, msg: `${CH_NAME[ch]}: đã ra lệnh cắt nhưng vẫn đóng`});
+    }
+    c.routes.forEach(r => {
+      const rs = cs.routes[r.id], tag = `${c.id}.${r.id}`;
+      setAlarm(r.id + '/CBN', !rs.cb, {tag, code: 'CB_NHANH', prio: 3, label: 'Nhảy CB nhánh', route: r.id, msg: `Nhảy CB nhánh tuyến ${r.id} (${r.name})`});
+      const expectOn = S.grid && cs.cb && cs.fb[r.ch] && rs.cb && settled;
+      const tot = rs.I.reduce((a, b) => a + b, 0), lost = Math.round((r.n * LAMP_A - tot) / LAMP_A);
+      const zero = expectOn && tot < 0.2, cut = expectOn && !zero && lost >= 3, lamp = expectOn && !zero && lost >= 1 && lost <= 2;
+      const est = r.n - lost;                     // số cột còn sáng tính từ tủ
+      setAlarm(r.id + '/ZERO', zero, {tag, code: 'MAT_DIEN_TUYEN', prio: 3, label: 'Tuyến không có dòng', route: r.id, extra: {est: 0},
+        msg: `${r.id}: đã cấp điện nhưng dòng ≈ 0 – nghi đứt cáp sát tủ (trước cột #1, ≈ ${r.distM[0]} m)`});
+      setAlarm(r.id + '/CUT', cut, {tag, code: 'CAT_CAP', prio: 3, label: 'Nghi cắt / đứt cáp', route: r.id, extra: {est},
+        msg: `${r.id}: dòng giảm ≈ ${lost} bóng – nghi đứt cáp sau cột #${est} (≈ ${r.distM[Math.max(0, est - 1)]}–${r.distM[Math.min(r.n - 1, est)]} m từ tủ)`});
+      setAlarm(r.id + '/LAMP', lamp, {tag, code: 'HONG_BONG', prio: 1, label: 'Nghi hỏng bóng', route: r.id,
+        msg: `${r.id}: dòng giảm ≈ ${lost} bóng – nghi hỏng bóng lẻ, cần kiểm tra hiện trường`});
+    });
+  });
+}
+function onNewAlarm(a) {
+  if (a.prio >= 2) toast(`🚨 ${a.tag}: ${a.label}`);
+  try { if (navigator.vibrate) navigator.vibrate(150); } catch (e) { /* bỏ qua */ }
+}
+function ackAlarm(key) {
+  const a = ALARMS[key]; if (!a || a.acked) return;
+  a.acked = true; HIST.unshift({t: Clock.ms, s: `✔ ACK ${a.tag} ${a.label}`});
+  Train.log('ack', {code: a.code, tag: a.tag, route: a.route, key});
+  maybeRemove(a);
+  ui();
+}
+function dispatch(key, team) {
+  const a = ALARMS[key]; if (!a) return;
+  a.team = team; maybeRemove(a); HIST.unshift({t: Clock.ms, s: `🧰 Giao ${team}: ${a.tag} ${a.label}`});
+  Train.log('dispatch', {code: a.code, tag: a.tag, route: a.route, key, team});
+  toast(`🧰 Đã giao ${team} xử lý ${a.tag}`); ui();
+}
+
+/* =====================================================================
+   5. LỆNH ĐIỀU KHIỂN
+   ===================================================================== */
+function cmdK(cabId, ch, val) {
+  const cs = S.cabs[cabId];
+  if (!S.grid || !cs.cb) toast('⚠ Tủ đang mất nguồn – lệnh vẫn được ghi, sẽ có hiệu lực khi có điện');
+  if (cs.mode === 'auto') cs.remote = cs.k.slice();
+  cs.mode = 'remote'; cs.remote[ch] = !!val;
+  HIST.unshift({t: Clock.ms, s: `➜ ${cabId}.K${ch + 1} ${val ? 'ĐÓNG' : 'CẮT'} (từ xa)`});
+  Train.log('cmd', {cab: cabId, ch, val: val ? 1 : 0});
+  toast(`✔ ${cabId}: ${val ? 'Đóng' : 'Cắt'} ${CH_NAME[ch]}`); step(); ui();
+}
+function cmdAuto(cabId) {
+  S.cabs[cabId].mode = 'auto'; HIST.unshift({t: Clock.ms, s: `➜ ${cabId} về TỰ ĐỘNG`});
+  Train.log('auto', {cab: cabId}); toast(`✔ ${cabId}: chạy theo lịch`); step(); ui();
+}
+function resetCB(cabId, routeId) {
+  const cs = S.cabs[cabId];
+  if (routeId) {
+    const rs = cs.routes[routeId]; rs.cb = true;
+    HIST.unshift({t: Clock.ms, s: `➜ Đóng lại CB nhánh ${routeId}`});
+    Train.log('cbReset', {cab: cabId, route: routeId, faultPresent: rs.down !== null});
+    step();
+    if (!rs.cb) { toast(`⛔ CB nhánh ${routeId} nhảy lại ngay – vẫn còn ngắn mạch trên tuyến!`, 5000); HIST.unshift({t: Clock.ms, s: `⛔ CB nhánh ${routeId} nhảy lại (còn sự cố)`}); }
+    else toast(`✔ Đã đóng lại CB nhánh ${routeId}`);
+  } else {
+    cs.cb = true; HIST.unshift({t: Clock.ms, s: `➜ Đóng lại CB tổng ${cabId}`});
+    Train.log('cbReset', {cab: cabId, route: null, faultPresent: false}); toast(`✔ Đã đóng lại CB tổng ${cabId}`); step();
+  }
+  ui();
+}
+function callGrid() {
+  HIST.unshift({t: Clock.ms, s: '📞 Báo điện lực khu vực'});
+  Train.log('callGrid', {});
+  toast('📞 Đã báo điện lực. ' + (S.grid ? 'Lưới đang có điện bình thường.' : 'Điện lực xác nhận sự cố lưới, đang khắc phục.'));
+  if (!S.grid && !Train.cur) setTimeout(() => { S.grid = true; toast('⚡ Điện lực đã cấp điện lại'); }, 20000);
+  ui();
+}
+function markLocation(routeId, idx, kind) {
+  const r = ROUTES[routeId];
+  HIST.unshift({t: Clock.ms, s: `📍 Đánh dấu: ${kind === 'post' ? 'sự cố tại' : 'đứt cáp sau'} cột #${idx + 1} ${routeId}`});
+  Train.log('locate', {route: routeId, idx, kind});
+  marks.push({route: routeId, idx, kind, t: Clock.ms});
+  toast(`📍 Đã đánh dấu ${kind === 'post' ? 'cột' : 'sau cột'} #${idx + 1} – ${r.name} (≈ ${r.distM[idx]} m từ ${r.cab})`);
+  ui();
+}
+let marks = [];
+
+/* =====================================================================
+   6. FACEPLATE (bảng điều khiển nhỏ khi bấm vào thiết bị)
+   ===================================================================== */
+function openFp(html) { $('#fp').innerHTML = html; $('#fp').classList.add('on'); $('#fpBg').classList.add('on'); }
+function closeFp() { $('#fp').classList.remove('on'); $('#fpBg').classList.remove('on'); }
+$('#fpBg').onclick = closeFp;
+function fpHead(title, sub) { return `<div class="fp-h"><div class="grow"><b class="mono">${esc(title)}</b><div class="sub">${esc(sub)}</div></div><button class="btn sm" data-act="fp-close">✕</button></div>`; }
+function confirmBox(text, onYes) {
+  openFp(`${fpHead('XÁC NHẬN LỆNH', 'Kiểm tra kỹ trước khi thực hiện')}<p>${text}</p>
+    <div class="row"><button class="btn" data-act="fp-close">Huỷ</button><button class="btn pri" id="fpYes">Thực hiện</button></div>`);
+  $('#fpYes').onclick = () => { closeFp(); onYes(); };
+}
+function fpTba() {
+  const tot = NET.cabs.reduce((s, c) => s + S.cabs[c.id].I.reduce((a, b) => a + b, 0), 0);
+  openFp(`${fpHead('TBA · ' + NET.tba.name, 'Nguồn cấp toàn khu vực')}
+    <div class="kv"><span>Lưới 22 kV</span><b style="color:${S.grid ? 'var(--ok)' : 'var(--bad)'}">${S.grid ? 'CÓ ĐIỆN' : 'MẤT ĐIỆN'}</b>
+    <span>Tổng dòng chiếu sáng</span><b>${num(tot, 1)} A</b><span>Số tủ cấp</span><b>${NET.cabs.length}</b></div>
+    <h3>Thao tác</h3><div class="row"><button class="btn pri" data-act="callGrid">📞 Báo điện lực</button></div>
+    <p class="sub">Mất điện lưới là việc của điện lực: không cử tổ đi kiểm tra từng tủ.</p>`);
+}
+function fpCab(cabId) {
+  const c = NET.cabs.find(x => x.id === cabId), cs = S.cabs[cabId];
+  openFp(`${fpHead(cabId + ' · Tủ điều khiển chiếu sáng', c.name)}
+    <div class="kv"><span>Chế độ</span><b>${cs.mode === 'auto' ? '🕒 Tự động theo lịch' : '📱 Điều khiển từ xa'}</b>
+      <span>Điện áp</span><b class="mono">${cs.V.map(v => num(v, 0)).join(' / ')} V</b>
+      <span>Dòng tổng</span><b class="mono">${cs.I.map(v => num(v, 2)).join(' / ')} A</b>
+      <span>CB tổng</span><b style="color:${cs.cb ? 'var(--ok)' : 'var(--bad)'}">${cs.cb ? 'ĐÓNG' : 'CẮT / NHẢY'}</b>
+      <span>Cửa tủ</span><b style="color:${cs.door ? 'var(--bad)' : 'var(--ok)'}">${cs.door ? 'MỞ' : 'Đóng'}</b></div>
+    <h3>Kênh đầu ra</h3>
+    ${[0, 1].map(ch => `<div class="row" style="margin-bottom:6px"><b class="grow">${CH_NAME[ch]}</b>
+      <span class="pill ${cs.fb[ch] ? 'ok' : ''}">${cs.fb[ch] ? 'ĐÓNG' : 'CẮT'}</span>${cs.k[ch] !== cs.fb[ch] ? '<span class="pill bad">LỆCH</span>' : ''}
+      <button class="btn sm" data-act="k" data-cab="${cabId}" data-ch="${ch}" data-val="1">Đóng</button><button class="btn sm" data-act="k" data-cab="${cabId}" data-ch="${ch}" data-val="0">Cắt</button></div>`).join('')}
+    <div class="row" style="margin-top:8px"><button class="btn" data-act="auto" data-cab="${cabId}">🕒 Về tự động</button>
+      ${!cs.cb ? `<button class="btn danger" data-act="cb" data-cab="${cabId}">Đóng lại CB tổng</button>` : ''}</div>
+    <h3>Tuyến</h3>
+    ${c.routes.map(r => { const rs = cs.routes[r.id]; return `<div class="row" style="margin-bottom:6px"><b class="grow">${r.id} · ${esc(r.name)}</b>
+      <span class="sub mono">${rs.I.map(v => num(v, 1)).join('/')} A</span>
+      ${rs.cb ? '<span class="pill ok">CB đóng</span>' : `<button class="btn sm danger" data-act="cbn" data-cab="${cabId}" data-route="${r.id}">Đóng lại CB nhánh</button>`}</div>`; }).join('')}`);
+}
+function fpPost(routeId, idx) {
+  const r = ROUTES[routeId], rs = S.cabs[r.cab].routes[routeId];
+  const truth = !View.fog;
+  openFp(`${fpHead(`Cột #${idx + 1} · ${routeId}`, `${r.name} · ${r.cab} · ${CH_NAME[r.ch]} · pha ${'ABC'[idx % 3]}`)}
+    <div class="kv"><span>Cách tủ</span><b>≈ ${r.distM[idx]} m theo cáp</b>
+    <span>Đèn</span><b>${truth ? (rs.lit[idx] ? '💡 Sáng' : rs.down === idx ? '💥 Cột đổ' : rs.fails.has(idx) && rs.pw[idx] ? '❌ Bóng hỏng' : '⚫ Tắt') : 'Không có cảm biến tại cột – xem SCADA'}</b></div>
+    <h3>Đánh dấu vị trí sự cố</h3>
+    <div class="row"><button class="btn pri" data-act="mark" data-route="${routeId}" data-idx="${idx}" data-kind="after">📍 Đứt cáp sau cột này</button>
+    <button class="btn" data-act="mark" data-route="${routeId}" data-idx="${idx}" data-kind="post">📍 Sự cố tại cột này</button></div>
+    <p class="sub">Điểm đánh dấu được gửi kèm khi giao tổ, để tổ đi thẳng tới đoạn cần kiểm tra.</p>`);
+}
+
+/* =====================================================================
+   7. SCADA – sơ đồ một sợi (SVG) tự vẽ từ NET
+   ===================================================================== */
+const COL = {on: '#f5a524', feed: '#36c5f0', off: '#4b5b6b', bad: '#f87171', tr: '#e879f9'};
+function swSym(x, y, closed, tripped, act, label) {
+  const col = tripped ? COL.tr : closed ? '#f1f5f9' : COL.off;
+  return `<g class="click ${tripped ? 'blink' : ''}" data-fp="${act}"><rect x="${x - 11}" y="${y - 11}" width="22" height="22" rx="3" fill="${closed ? col : '#0b1219'}" stroke="${col}" stroke-width="2"/>
+    ${closed ? '' : `<line x1="${x - 7}" y1="${y + 7}" x2="${x + 7}" y2="${y - 7}" stroke="${col}" stroke-width="2"/>`}
+    <text x="${x + 16}" y="${y + 4}" class="s-mut">${label}</text></g>`;
+}
+function kSym(x, y, cmd, fb, act, label) {
+  const bad = cmd !== fb, col = bad ? COL.bad : fb ? COL.on : COL.off;
+  return `<g class="click ${bad ? 'blink' : ''}" data-fp="${act}"><circle cx="${x}" cy="${y}" r="13" fill="${fb ? 'rgba(245,165,36,.18)' : '#0b1219'}" stroke="${col}" stroke-width="2.5"/>
+    <text x="${x}" y="${y + 4}" text-anchor="middle" class="s-tag" style="font-size:11px">${label}</text></g>`;
+}
+function scadaSVG() {
+  const W = 1000, colW = W / NET.cabs.length, top = 30, bus = 108, H = 700;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sơ đồ một sợi lưới chiếu sáng">`;
+  // TBA + thanh cái 0,4 kV
+  const gc = S.grid ? COL.feed : COL.off;
+  s += `<g class="click" data-fp="tba"><circle cx="${W / 2 - 10}" cy="${top + 18}" r="16" fill="none" stroke="${gc}" stroke-width="2.5"/><circle cx="${W / 2 + 10}" cy="${top + 18}" r="16" fill="none" stroke="${gc}" stroke-width="2.5"/>
+    <text x="${W / 2 + 34}" y="${top + 14}" class="s-tag">TBA</text><text x="${W / 2 + 34}" y="${top + 30}" class="s-mut">22/0,4 kV · ${S.grid ? 'CÓ ĐIỆN' : 'MẤT ĐIỆN'}</text></g>`;
+  s += `<line x1="${W / 2}" y1="${top + 34}" x2="${W / 2}" y2="${bus}" stroke="${gc}" stroke-width="3"/>`;
+  s += `<line x1="40" y1="${bus}" x2="${W - 40}" y2="${bus}" stroke="${gc}" stroke-width="6" ${S.grid ? '' : 'class="blink"'}/><text x="42" y="${bus - 8}" class="s-mut">THANH CÁI 0,4 kV</text>`;
+  NET.cabs.forEach((c, ci) => {
+    const cs = S.cabs[c.id], cx = colW * ci + colW / 2, x0 = colW * ci + 12, x1 = colW * (ci + 1) - 12;
+    const cabAl = Object.values(ALARMS).some(a => a.active && a.tag.startsWith(c.id));
+    const live = S.grid;
+    s += `<line x1="${cx}" y1="${bus}" x2="${cx}" y2="${bus + 40}" stroke="${live ? COL.feed : COL.off}" stroke-width="3"/>`;
+    s += `<rect x="${x0}" y="${bus + 40}" width="${x1 - x0}" height="${H - bus - 52}" rx="10" fill="rgba(54,197,240,.03)" stroke="${cabAl ? COL.bad : '#24384b'}" stroke-dasharray="6 5" ${cabAl ? 'class="blink"' : ''}/>`;
+    s += `<g class="click" data-fp="cab:${c.id}"><text x="${x0 + 10}" y="${bus + 62}" class="s-tag">${c.id}</text>
+      <text x="${x0 + 10}" y="${bus + 80}" class="s-mut">${cs.mode === 'auto' ? 'TỰ ĐỘNG' : 'TỪ XA'} · ${num(cs.V[0], 0)}/${num(cs.V[1], 0)}/${num(cs.V[2], 0)} V</text>
+      <text x="${x1 - 10}" y="${bus + 62}" text-anchor="end" class="s-mut" style="fill:#f87171!important">${cs.door ? 'CỬA MỞ' : ''}</text></g>`;
+    s += `<line x1="${cx}" y1="${bus + 40}" x2="${cx}" y2="${bus + 92}" stroke="${live ? COL.feed : COL.off}" stroke-width="3"/>`;
+    s += swSym(cx, bus + 104, cs.cb, !cs.cb, `cab:${c.id}`, 'CB tổng');
+    const busY = bus + 140, pw = live && cs.cb;
+    s += `<line x1="${cx}" y1="${bus + 115}" x2="${cx}" y2="${busY}" stroke="${pw ? COL.on : COL.off}" stroke-width="3"/>`;
+    const bx = c.routes.map((_, ri) => x0 + (x1 - x0) * (ri + 0.5) / c.routes.length);
+    s += `<line x1="${bx[0]}" y1="${busY}" x2="${bx[bx.length - 1]}" y2="${busY}" stroke="${pw ? COL.on : COL.off}" stroke-width="4"/>`;
+    c.routes.forEach((r, ri) => {
+      const rs = cs.routes[r.id], x = bx[ri];
+      const a1 = pw, a2 = a1 && rs.cb, a3 = a2 && cs.fb[r.ch];
+      s += `<line x1="${x}" y1="${busY}" x2="${x}" y2="${busY + 22}" stroke="${a1 ? COL.on : COL.off}" stroke-width="3"/>`;
+      s += swSym(x, busY + 34, rs.cb, !rs.cb, `cbn:${c.id}:${r.id}`, 'CB');
+      s += `<line x1="${x}" y1="${busY + 45}" x2="${x}" y2="${busY + 70}" stroke="${a2 ? COL.on : COL.off}" stroke-width="3"/>`;
+      s += kSym(x, busY + 84, cs.k[r.ch], cs.fb[r.ch], `k:${c.id}:${r.ch}`, 'K' + (r.ch + 1));
+      s += `<text x="${x + 18}" y="${busY + 89}" class="s-mut">${r.ch ? 'Nửa đêm' : 'Cả đêm'}</text>`;
+      s += `<line x1="${x}" y1="${busY + 97}" x2="${x}" y2="${busY + 140}" stroke="${a3 ? COL.on : COL.off}" stroke-width="3"/>`;
+      // CT + số đo
+      s += `<circle cx="${x}" cy="${busY + 118}" r="7" fill="none" stroke="#9fb3c6" stroke-width="1.5"/>`;
+      const tot = rs.I.reduce((a, b) => a + b, 0);
+      ['A', 'B', 'C'].forEach((p, k) => { s += `<text x="${x - 58}" y="${busY + 158 + k * 20}" class="s-val">${p} ${num(rs.I[k], 2)} A</text>`; });
+      s += `<text x="${x - 58}" y="${busY + 220}" class="s-mut">Σ ${num(tot, 1)} A / ${num(r.n * LAMP_A, 1)}</text>`;
+      // Tuyến + vị trí cột (ước tính từ dòng đo được)
+      const al = ALARMS[r.id + '/CUT'] || ALARMS[r.id + '/ZERO'];
+      const est = al && al.active ? (al.extra ? al.extra.est : 0) : null;
+      const litEst = a3 ? Math.round(tot / LAMP_A) : 0;
+      const ty = busY + 250;
+      s += `<text x="${x - 60}" y="${ty}" class="s-tag" style="font-size:15px">${r.id}</text><text x="${x - 30}" y="${ty}" class="s-mut">${esc(r.name.length > 10 ? r.name.slice(0, 9) + '…' : r.name)}</text>`;
+      const rowN = 7, dx = 21;
+      r.posts.forEach((_, i) => {
+        const px = x - 60 + (i % rowN) * dx, py = ty + 18 + Math.floor(i / rowN) * 22;
+        let fill = '#0b1219', stroke = COL.off, cls = '';
+        if (a3 && est === null && i < litEst) { fill = 'rgba(255,233,166,.85)'; stroke = '#ffe9a6'; }
+        if (est !== null && i >= est) { stroke = COL.bad; cls = 'blink'; }
+        if (est !== null && i < est) { fill = 'rgba(255,233,166,.85)'; stroke = '#ffe9a6'; }
+        const mk = marks.some(m => m.route === r.id && m.idx === i);
+        s += `<g class="click ${cls}" data-fp="post:${r.id}:${i}"><circle cx="${px}" cy="${py}" r="7" fill="${fill}" stroke="${stroke}" stroke-width="2"/>${mk ? `<text x="${px}" y="${py - 10}" text-anchor="middle" style="font-size:11px">📍</text>` : ''}</g>`;
+        if (i % rowN && i) s += `<line x1="${px - dx + 7}" y1="${py}" x2="${px - 7}" y2="${py}" stroke="${est !== null && i >= est ? COL.bad : a3 ? COL.on : COL.off}" stroke-width="2"/>`;
+      });
+    });
+  });
+  s += `</svg>`;
+  return s;
+}
+function renderScada() {
+  $('#scada').innerHTML = `<div class="row" style="margin-bottom:8px"><h2 class="grow" style="margin:0">Sơ đồ một sợi · Khu vực A</h2><span class="sub mono">${Clock.txt()}</span></div>
+    ${scadaSVG()}
+    <div class="slegend"><span><i style="background:${COL.feed}"></i>Nguồn có điện</span><span><i style="background:${COL.on}"></i>Lộ chiếu sáng có điện</span><span><i style="background:${COL.off}"></i>Không điện</span><span><i style="background:${COL.tr}"></i>CB nhảy</span><span><i style="background:${COL.bad}"></i>Nghi sự cố</span></div>
+    <p class="sub">Bấm CB, contactor (K1/K2), tủ, TBA hoặc chấm cột để mở bảng điều khiển. Chấm cột trên SCADA là <b>ước tính từ dòng đo được</b> – tủ không đo được từng bóng.</p>`;
+}
+
+/* =====================================================================
+   8. BẢNG CẢNH BÁO
+   ===================================================================== */
+function renderAlarms() {
+  const list = Object.values(ALARMS).sort((a, b) => (a.acked - b.acked) || (b.prio - a.prio) || (b.tOn - a.tOn));
+  const unack = list.filter(a => !a.acked).length;
+  [$('#cntA'), $('#cntM')].forEach(e => { e.hidden = !unack; e.textContent = unack; });
+  const latest = list.find(a => !a.acked && a.active);
+  const bn = $('#banner');
+  if (latest) { bn.classList.add('on'); bn.innerHTML = `<b>🚨 ${esc(latest.tag)}</b><span class="grow">${esc(latest.msg)}</span><button class="btn sm" data-act="ack" data-key="${esc(latest.key)}">ACK</button>`; }
+  else bn.classList.remove('on');
+  $('#v-alarm').innerHTML = `<div class="row"><h2 class="grow" style="margin:0">Cảnh báo đang hoạt động (${list.length})</h2>
+      <button class="btn sm" data-act="ackAll" ${unack ? '' : 'disabled'}>ACK tất cả</button></div>
+    <p class="sub">Dòng nhấp nháy = chưa xác nhận. ACK xác nhận đã thấy; "Giao tổ" cử người xử lý (kèm điểm đã đánh dấu).</p>
+    ${list.length ? `<table class="al"><thead><tr><th>Giờ</th><th>Thiết bị</th><th>Nội dung · thao tác</th></tr></thead><tbody>
+      ${list.map(a => `<tr class="p${a.prio} ${a.acked ? '' : 'unack'} ${a.active ? 'act' : 'clr'}">
+        <td class="mono">${Clock.txt(a.tOn)}</td>
+        <td class="mono"><b>${esc(a.tag)}</b><br><span class="pill ${a.prio === 3 ? 'bad' : a.prio === 2 ? 'warn' : 'cy'}">${PRIO[a.prio]}</span></td>
+        <td>${esc(a.msg)}${a.active ? '' : ` <span class="pill ok">ĐÃ HẾT</span>${FIELD.has(a.code) && !a.team ? ' <span class="pill warn">CHƯA GIAO TỔ</span>' : ''}`}${a.team ? `<br><span class="pill cy">🧰 ${esc(a.team)}</span>` : ''}
+        <div class="row" style="margin-top:6px">${a.acked ? '' : `<button class="btn sm pri" data-act="ack" data-key="${esc(a.key)}">ACK</button>`}
+          ${!a.team ? `<select class="btn sm" data-act="dispatch" data-key="${esc(a.key)}" aria-label="Giao tổ"><option value="">Giao tổ…</option>${TEAMS.map(t => `<option>${t}</option>`).join('')}</select>` : ''}
+          ${a.route ? `<button class="btn sm" data-act="goto" data-route="${a.route}" data-idx="${a.extra ? Math.max(0, a.extra.est - 1) : 0}">🗺️ Xem</button>` : ''}</div></td></tr>`).join('')}
+    </tbody></table>` : '<div class="card sub">Không có cảnh báo.</div>'}
+    <h3>Nhật ký sự kiện</h3>
+    <div class="card mono" style="font-size:12px;max-height:260px;overflow:auto">${HIST.slice(0, 80).map(h => `<div>${Clock.txt(h.t)} ${esc(h.s)}</div>`).join('') || '—'}</div>`;
+}
+
+/* =====================================================================
+   9. ĐÀO TẠO VẬN HÀNH
+   ===================================================================== */
+const after = (ev, t) => ev.t >= t;
+const SCEN = [
+  {id: 'cut', icon: '✂️', title: 'Cắt trộm cáp trên tuyến', level: 'Cơ bản',
+    brief: 'Đang ca đêm. Theo dõi SCADA và xử lý khi có bất thường.',
+    setup(c) {
+      const r = pick(Object.values(ROUTES).filter(x => x.ch === 0 && x.n >= 7));
+      c.route = r.id; c.cab = r.cab; c.ch = r.ch; c.cut = rint(2, r.n - 3);
+      c.inject = () => { S.cabs[c.cab].routes[c.route].cut = c.cut; };
+      c.fix = () => { S.cabs[c.cab].routes[c.route].cut = null; return `đã nối lại cáp ${c.route} đoạn cột #${c.cut}–#${c.cut + 1}, đề nghị cấp điện lại`; };
+      c.fixOn = 'CAT_CAP';
+    },
+    steps: [
+      {t: 'Xác nhận (ACK) cảnh báo nghi cắt cáp', pts: 10, ok: (E, c) => E.some(e => e.type === 'ack' && e.code === 'CAT_CAP' && e.route === c.route)},
+      {t: 'Đánh dấu đúng đoạn nghi đứt (sai lệch ≤ 1 cột)', pts: 25, ok: (E, c) => E.some(e => e.type === 'locate' && e.route === c.route && Math.abs(e.idx - (c.cut - 1)) <= 1)},
+      {t: 'Cắt kênh của tuyến để cô lập đầu cáp hở còn mang điện', pts: 25, ok: (E, c) => E.some(e => e.type === 'cmd' && e.cab === c.cab && e.ch === c.ch && e.val === 0)},
+      {t: 'Giao tổ xử lý', pts: 15, ok: (E, c) => E.some(e => e.type === 'dispatch' && e.route === c.route)},
+      {t: 'Tổ báo xong → cấp điện lại (bật kênh hoặc về tự động)', pts: 15, ok: (E, c) => c.fixedT && E.some(e => after(e, c.fixedT) && e.cab === c.cab && ((e.type === 'cmd' && e.ch === c.ch && e.val === 1) || e.type === 'auto'))}
+    ],
+    pens: [{t: 'Cắt điện tủ / kênh không liên quan', pts: 10, hit: (e, c) => e.type === 'cmd' && e.val === 0 && !(e.cab === c.cab && e.ch === c.ch)}],
+    lesson: 'Dòng giảm theo bội số nhiều bóng, cả 3 pha cùng giảm → đứt cáp. Ước tính vị trí từ số bóng mất, khoanh đoạn cho tổ. Đầu cáp phía tủ vẫn mang điện → phải cắt kênh trước khi tổ tới, rồi mới cấp lại sau khi nối xong.'},
+  {id: 'crash', icon: '💥', title: 'Xe tông cột – nhảy CB nhánh', level: 'Cơ bản',
+    brief: 'Đang ca đêm. Có thể nhận được tin báo của người dân.',
+    setup(c) {
+      const r = ROUTES.R5; c.route = r.id; c.cab = r.cab; c.down = rint(3, r.n - 3);
+      c.inject = () => { S.cabs[c.cab].routes[c.route].down = c.down; c.msg = `📞 ${Clock.txt()} Người dân gọi: "Xe tải tông đổ một cột đèn trên ${r.name}, khoảng ${Math.round(r.distM[c.down] / 10) * 10} m tính từ ngã tư Đường 3."`; };
+      c.fix = () => { S.cabs[c.cab].routes[c.route].down = null; return `đã dựng lại cột #${c.down + 1}, cách ly chỗ chạm chập, đề nghị đóng lại CB nhánh ${c.route}`; };
+      c.fixOn = 'CB_NHANH';
+    },
+    steps: [
+      {t: 'ACK cảnh báo nhảy CB nhánh', pts: 10, ok: (E, c) => E.some(e => e.type === 'ack' && e.code === 'CB_NHANH' && e.route === c.route)},
+      {t: 'Xác định đúng cột bị tông (từ tin báo + khoảng cách)', pts: 25, ok: (E, c) => E.some(e => e.type === 'locate' && e.route === c.route && Math.abs(e.idx - c.down) <= 1)},
+      {t: 'Giao tổ xử lý', pts: 20, ok: (E, c) => E.some(e => e.type === 'dispatch' && e.route === c.route)},
+      {t: 'KHÔNG đóng lại CB khi chưa xử lý xong', pts: 25, ok: (E, c) => !E.some(e => e.type === 'cbReset' && e.route === c.route && e.faultPresent)},
+      {t: 'Tổ báo xong → đóng lại CB nhánh', pts: 20, ok: (E, c) => c.fixedT && E.some(e => e.type === 'cbReset' && e.route === c.route && !e.faultPresent)}
+    ],
+    pens: [],
+    lesson: 'Nhảy CB nhánh khi đang sáng = ngắn mạch/chạm đất. Đóng lại khi chưa xử lý có thể gây giật điện cho người ở hiện trường. Kết hợp tin báo và khoảng cách cáp để chỉ đúng cột.'},
+  {id: 'grid', icon: '⚡', title: 'Mất điện lưới toàn khu vực', level: 'Cơ bản',
+    brief: 'Đang ca đêm. Phân biệt sự cố của mình và sự cố của lưới.',
+    setup(c) {
+      c.inject = () => { S.grid = false; };
+      c.onCall = () => { if (!c.called) { c.called = true; setTimeout(() => { if (Train.cur && Train.ctx === c) { S.grid = true; c.restored = Train.sec(); toast('⚡ Điện lực: đã cấp điện trở lại'); ui(); } }, 15000); } };
+    },
+    steps: [
+      {t: 'ACK cảnh báo mất điện lưới', pts: 15, ok: E => E.some(e => e.type === 'ack' && e.code === 'MAT_DIEN_LUOI')},
+      {t: 'Báo điện lực (mở TBA → 📞)', pts: 35, ok: E => E.some(e => e.type === 'callGrid')},
+      {t: 'Không cử tổ đi kiểm tra tủ', pts: 25, ok: E => !E.some(e => e.type === 'dispatch')},
+      {t: 'Có điện lại → xác nhận các tủ đã sáng trở lại', pts: 25, ok: (E, c) => c.restored && E.some(e => e.type === 'confirm')}
+    ],
+    pens: [{t: 'Tắt kênh / đóng cắt CB không cần thiết khi mất lưới', pts: 5, hit: e => e.type === 'cmd' || e.type === 'cbReset'}],
+    lesson: 'Cả 3 tủ cùng mất áp cùng lúc → nguồn từ TBA/lưới. Gọi điện lực, không tốn người đi từng tủ. Có điện lại thì kiểm tra tất cả tủ tự sáng lại theo lịch.'},
+  {id: 'kfail', icon: '🧲', title: 'Contactor không đóng lúc 18:00', level: 'Trung bình',
+    brief: 'Còn ít phút nữa tới giờ bật đèn. Theo dõi các tủ khi chuyển trạng thái.',
+    setup(c) {
+      c.cab = 'TU-02'; c.ch = 1; Clock.set(17, 58, 20);
+      c.inject = () => { S.cabs[c.cab].kfail[c.ch] = true; };
+      c.injectAt = 0;
+      c.fix = () => { S.cabs[c.cab].kfail[c.ch] = false; return 'đã thay contactor K2 tủ TU-02, đề nghị trả tủ về tự động'; };
+      c.fixOn = 'K_KHONG_DONG';
+    },
+    steps: [
+      {t: 'ACK cảnh báo contactor không đóng', pts: 20, ok: (E, c) => E.some(e => e.type === 'ack' && e.code === 'K_KHONG_DONG' && e.tag.startsWith(c.cab))},
+      {t: 'Thử ra lệnh đóng lại từ xa trước khi cử người', pts: 20, ok: (E, c) => E.some(e => e.type === 'cmd' && e.cab === c.cab && e.ch === c.ch && e.val === 1)},
+      {t: 'Giao tổ xử lý', pts: 25, ok: (E, c) => E.some(e => e.type === 'dispatch' && e.tag.startsWith(c.cab))},
+      {t: 'Tổ báo xong → trả tủ về tự động', pts: 25, ok: (E, c) => c.fixedT && E.some(e => after(e, c.fixedT) && e.type === 'auto' && e.cab === c.cab)}
+    ],
+    pens: [{t: 'Thao tác tủ khác', pts: 5, hit: (e, c) => (e.type === 'cmd' || e.type === 'auto') && e.cab !== c.cab}],
+    lesson: 'Có lệnh mà không có phản hồi tiếp điểm phụ → lỗi contactor/cuộn hút. Thử lệnh lại một lần (loại trừ lỗi tạm), không được thì cử người. Sau khi thay, trả về tự động để tủ chạy theo lịch.'},
+  {id: 'lamp', icon: '💡', title: 'Hỏng bóng lẻ trên 2 tuyến', level: 'Trung bình',
+    brief: 'Đang ca đêm. Không phải bất thường nào cũng là sự cố lớn.',
+    setup(c) {
+      const rs = Object.values(ROUTES).filter(r => r.ch === 0); const r1 = rs[0], r2 = rs[2];
+      c.items = [{route: r1.id, cab: r1.cab, idx: rint(1, r1.n - 2)}, {route: r2.id, cab: r2.cab, idx: rint(1, r2.n - 2)}];
+      c.inject = () => c.items.forEach(x => S.cabs[x.cab].routes[x.route].fails.add(x.idx));
+      c.fix = ev => { const x = c.items.find(i => i.route === ev.route); if (!x) return null; S.cabs[x.cab].routes[x.route].fails.delete(x.idx); x.fixed = true; return `đã thay bóng cột #${x.idx + 1} ${x.route}`; };
+      c.fixOn = 'HONG_BONG';
+    },
+    steps: [
+      {t: 'ACK cả 2 cảnh báo hỏng bóng', pts: 20, ok: (E, c) => c.items.every(x => E.some(e => e.type === 'ack' && e.code === 'HONG_BONG' && e.route === x.route))},
+      {t: 'Giao tổ kiểm tra cả 2 tuyến', pts: 40, ok: (E, c) => c.items.every(x => E.some(e => e.type === 'dispatch' && e.route === x.route))},
+      {t: 'Không cắt điện cả tuyến vì hỏng bóng lẻ', pts: 40, ok: (E, c) => !E.some(e => e.type === 'cmd' && e.val === 0)}
+    ],
+    pens: [],
+    lesson: 'Dòng giảm 1–2 bóng không đủ để xác định vị trí – tủ chỉ đo tổng. Cần tổ đi kiểm tra bằng mắt. Không cắt cả tuyến làm tối đường chỉ vì 1–2 bóng hỏng.'}
+];
+const Train = {
+  cur: null, ctx: null, E: [], t0: 0, exam: false, result: null, name: store.get('csmap.name', ''),
+  hist: store.get('csmap.results', []),
+  sec() { return (Date.now() - this.t0) / 1000; },
+  start(id) {
+    const sc = SCEN.find(s => s.id === id);
+    initState(); ALARMS = {}; HIST = []; deb = {}; marks = [];
+    Clock.set(19, 10); tick = 0;
+    this.cur = sc; this.ctx = {}; this.E = []; this.result = null; this.t0 = Date.now();
+    sc.setup(this.ctx);
+    for (let i = 0; i < 4; i++) step();
+    View.setFog(true);
+    const delay = this.ctx.injectAt ?? rnd(4, 9);
+    this.ctx.timer = setTimeout(() => { if (this.cur === sc) { this.ctx.inject(); this.ctx.injected = this.sec(); } }, delay * 1000);
+    $('#modeTxt').textContent = 'ĐÀO TẠO';
+    HIST.unshift({t: Clock.ms, s: `🎓 Bắt đầu bài: ${sc.title}`});
+    toast(`🎓 Bắt đầu: ${sc.title}`); ui();
+  },
+  log(type, d) {
+    if (!this.cur || this.result) return;
+    const ev = Object.assign({type, t: this.sec()}, d); this.E.push(ev);
+    const c = this.ctx;
+    if (type === 'callGrid' && c.onCall) c.onCall();
+    if (type === 'dispatch' && c.fix && (!c.fixOn || ev.code === c.fixOn)) {
+      setTimeout(() => {
+        if (this.cur && this.ctx === c && !this.result) {
+          const m = c.fix(ev); if (m) { c.fixedT = this.sec(); toast(`🧰 ${ev.team} báo: ${m}`, 6000); HIST.unshift({t: Clock.ms, s: `🧰 ${ev.team}: ${m}`}); ui(); }
+        }
+      }, 15000);
+    }
+    if (this.cur.steps.every(s => s.ok(this.E, c))) setTimeout(() => this.finish(), 600);
+  },
+  finish() {
+    if (!this.cur || this.result) return;
+    const sc = this.cur, c = this.ctx, el = this.sec();
+    const steps = sc.steps.map(s => ({t: s.t, pts: s.pts, ok: !!s.ok(this.E, c)}));
+    const pens = [];
+    sc.pens.forEach(p => { const n = this.E.filter(e => p.hit(e, c)).length; if (n) pens.push({t: p.t, pts: p.pts * n, n}); });
+    // Thang 100: các bước 90 điểm (quy đổi theo trọng số), thưởng tốc độ tối đa 10
+    const maxB = steps.reduce((s, x) => s + x.pts, 0);
+    steps.forEach(x => { x.pts = Math.round(x.pts * 90 / maxB); });
+    const base = steps.reduce((s, x) => s + (x.ok ? x.pts : 0), 0);
+    const speed = steps.every(x => x.ok) ? Math.max(0, Math.round(10 * (1 - Math.max(0, el - 90) / 210))) : 0;
+    const score = Math.max(0, Math.min(100, base + speed - pens.reduce((s, p) => s + p.pts, 0)));
+    this.result = {sc, steps, pens, base, speed, score, el};
+    const rec = {name: this.name || 'Học viên', scen: sc.title, score, sec: Math.round(el), date: new Date().toLocaleString('vi-VN'), exam: this.exam};
+    this.hist.unshift(rec); this.hist = this.hist.slice(0, 50); store.set('csmap.results', this.hist);
+    clearTimeout(c.timer); $('#modeTxt').textContent = 'VẬN HÀNH';
+    ui();
+  },
+  quit() { if (this.ctx) clearTimeout(this.ctx.timer); this.cur = null; this.ctx = null; this.result = null; $('#modeTxt').textContent = 'VẬN HÀNH'; ui(); }
+};
+function renderTrain() {
+  const T = Train, v = $('#v-train');
+  if (T.result) {
+    const R = T.result;
+    v.innerHTML = `<div class="card"><div class="row"><div class="grow"><div class="sub">${esc(R.sc.title)} · ${Math.round(R.el)} giây</div><h2 style="margin:2px 0 0">Kết quả</h2></div><div class="score">${R.score}</div></div>
+      ${R.steps.map(s => `<div class="step"><b>${s.ok ? '✅' : '❌'}</b><span class="grow">${esc(s.t)}</span><span class="mono">${s.ok ? '+' + s.pts : '0'}</span></div>`).join('')}
+      ${R.speed ? `<div class="step"><b>⏱️</b><span class="grow">Thưởng tốc độ</span><span class="mono">+${R.speed}</span></div>` : ''}
+      ${R.pens.map(p => `<div class="step"><b>⚠️</b><span class="grow">${esc(p.t)} (×${p.n})</span><span class="mono">−${p.pts}</span></div>`).join('')}
+      <div class="msg"><b>Quy trình đúng:</b> ${esc(R.sc.lesson)}</div>
+      <div class="row"><button class="btn pri" data-act="train" data-id="${R.sc.id}">↻ Làm lại</button><button class="btn" data-act="quit">Danh sách bài</button></div></div>`;
+    return;
+  }
+  if (T.cur) {
+    const c = T.ctx, el = Math.round(T.sec());
+    v.innerHTML = `<div class="card"><div class="row"><div class="grow"><span class="pill cy">${T.exam ? 'SÁT HẠCH' : 'HƯỚNG DẪN'}</span> <b>${T.cur.icon} ${esc(T.cur.title)}</b></div><b class="mono">⏱ ${Math.floor(el / 60)}:${pad(el % 60)}</b></div>
+      <div class="msg">${esc(T.cur.brief)}</div>${c.msg ? `<div class="msg" style="border-color:var(--warn)">${esc(c.msg)}</div>` : ''}
+      ${T.exam ? '<p class="sub">Chế độ sát hạch: các bước cần làm được ẩn tới khi chấm điểm.</p>' :
+        `<h3>Nhiệm vụ</h3>${T.cur.steps.map(s => `<div class="step"><b>${s.ok(T.E, c) ? '✅' : '⬜'}</b><span>${esc(s.t)}</span></div>`).join('')}`}
+      ${c.restored && !T.E.some(e => e.type === 'confirm') ? '<div class="row" style="margin-top:8px"><button class="btn ok" data-act="confirm">✅ Xác nhận các tủ đã có điện và sáng lại</button></div>' : ''}
+      <div class="row" style="margin-top:10px"><button class="btn pri" data-act="finish">Kết thúc & chấm điểm</button><button class="btn" data-act="quit">Bỏ bài</button></div></div>
+      <p class="sub">Gợi ý thao tác: ACK ở tab Cảnh báo · bấm thiết bị trên SCADA/3D để điều khiển · bấm cột để 📍 đánh dấu · "Giao tổ" trên dòng cảnh báo.</p>`;
+    return;
+  }
+  v.innerHTML = `<div class="card"><h2>Đào tạo vận hành</h2>
+      <div class="row"><input class="btn" style="flex:1;min-width:150px;cursor:text" id="tName" placeholder="Tên học viên" value="${esc(T.name)}" autocomplete="off">
+      <label class="row sub"><input type="checkbox" id="tExam" ${T.exam ? 'checked' : ''}> Sát hạch (ẩn các bước)</label></div>
+      <p class="sub">Khi vào bài, "Che hiện trường" được bật: 3D không cho thấy đèn nào tắt, cáp đứt ở đâu – giống trực ca thật, chỉ có số liệu SCADA và tin báo.</p></div>
+    ${SCEN.map(s => `<div class="card scen" data-act="train" data-id="${s.id}" role="button" tabindex="0"><div class="row"><b class="grow">${s.icon} ${esc(s.title)}</b><span class="pill">${s.level}</span></div><div class="sub">${esc(s.brief)}</div></div>`).join('')}
+    <h3>Kết quả gần đây</h3>
+    <div class="card" style="font-size:12.5px">${T.hist.length ? `<table class="al"><tr><th>Học viên</th><th>Bài</th><th>Điểm</th><th>Thời gian</th></tr>${T.hist.slice(0, 15).map(h => `<tr><td>${esc(h.name)}</td><td>${esc(h.scen)}${h.exam ? ' 🎯' : ''}</td><td><b>${h.score}</b></td><td class="sub">${h.sec}s · ${esc(h.date)}</td></tr>`).join('')}</table>
+      <div class="row" style="margin-top:8px"><button class="btn sm" data-act="exportRes">⬇️ Xuất Excel</button></div>` : '<span class="sub">Chưa có</span>'}</div>
+    <h3>Tạo sự cố tự do (vận hành thử)</h3>
+    <div class="card"><div class="row"><select class="btn" id="fxRoute">${Object.values(ROUTES).map(r => `<option value="${r.id}">${r.id} · ${esc(r.name)} (${r.cab})</option>`).join('')}</select>
+      <input class="btn" id="fxIdx" type="number" min="1" value="3" style="width:70px" aria-label="Cột số"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn sm" data-act="fx" data-f="cut">✂️ Cắt cáp sau cột</button><button class="btn sm" data-act="fx" data-f="lamp">💡 Hỏng bóng</button>
+        <button class="btn sm" data-act="fx" data-f="crash">💥 Xe tông cột</button><button class="btn sm" data-act="fx" data-f="kfail">🧲 K không đóng</button>
+        <button class="btn sm" data-act="fx" data-f="cb">🔻 Nhảy CB tổng</button><button class="btn sm" data-act="fx" data-f="door">🚪 Mở cửa tủ</button>
+        <button class="btn sm" data-act="fx" data-f="grid">⚡ Mất lưới</button><button class="btn sm ok" data-act="fx" data-f="clear">✅ Khôi phục hết</button></div>
+      <h3>Nhảy giờ</h3><div class="row"><button class="btn sm" data-act="jump" data-h="17" data-m="59">17:59</button><button class="btn sm" data-act="jump" data-h="22" data-m="59">22:59</button><button class="btn sm" data-act="jump" data-h="5" data-m="29">05:29</button><button class="btn sm" data-act="jump" data-h="12" data-m="0">12:00</button></div></div>`;
+}
+function freeFault(f) {
+  const r = ROUTES[$('#fxRoute').value], idx = Math.min(r.n, Math.max(1, +$('#fxIdx').value || 1)) - 1;
+  const cs = S.cabs[r.cab], rs = cs.routes[r.id];
+  if (f === 'cut') rs.cut = idx + 1 >= r.n ? r.n - 1 : idx + 1;
+  if (f === 'lamp') rs.fails.add(idx);
+  if (f === 'crash') rs.down = idx;
+  if (f === 'kfail') cs.kfail[r.ch] = true;
+  if (f === 'cb') cs.cb = false;
+  if (f === 'door') cs.door = !cs.door;
+  if (f === 'grid') S.grid = false;
+  if (f === 'clear') { const keep = Clock.ms; initState(); Clock.ms = keep; marks = []; }
+  toast('Đã áp dụng'); step(); ui();
+}
+
+/* =====================================================================
+   10. MÔ HÌNH 3D
+   ===================================================================== */
+const View = {
+  fog: false, flow: true, sel: null,
+  setFog(on) { this.fog = on; $('#bFog').classList.toggle('on', on); },
+};
+const G3 = {
+  ok: false, cam: {theta: -0.55, phi: 0.92, r: 78, tx: 0, ty: 0, tz: -8}, goal: null, pts: new Map(),
+  async init() {
+    if (!window.THREE) { try { await loadScript('vendor/three.min.js'); } catch (e) { /* thử CDN */ } }
+    if (!window.THREE) { try { await loadScript('https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js'); } catch (e) { /* bỏ qua */ } }
+    if (!window.THREE) { $('#c3d').innerHTML = '<div class="loading3d">Không tải được thư viện 3D – kiểm tra mạng.</div>'; return; }
+    const T = THREE, box = $('#c3d'); box.innerHTML = '';
+    this.R = new T.WebGLRenderer({antialias: true}); this.R.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); this.R.outputEncoding = T.sRGBEncoding;
+    box.appendChild(this.R.domElement);
+    this.cam3 = new T.PerspectiveCamera(38, 1, 0.5, 400);
+    this.sc = new T.Scene(); this.sc.background = new T.Color('#141d27');
+    this.hemi = new T.HemisphereLight(0xcfe3ff, 0x1a2430, 0.7); this.sc.add(this.hemi);
+    this.sun = new T.DirectionalLight(0xffffff, 0.6); this.sun.position.set(-30, 60, 40); this.sc.add(this.sun);
+    this.ray = new T.Raycaster();
+    this.build(); this.bind(); this.resize(); this.ok = true;
+    window.addEventListener('resize', () => this.resize());
+    requestAnimationFrame(t => this.frame(t));
+  },
+  mat(c, o) { return new THREE.MeshStandardMaterial(Object.assign({color: c, roughness: 0.8, metalness: 0.05}, o || {})); },
+  mesh(geo, c, x, y, z, o, parent) { const m = new THREE.Mesh(geo, this.mat(c, o)); m.position.set(x, y, z); (parent || this.sc).add(m); return m; },
+  tex(w, h, draw) { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; const api = {cv, t, draw(...a) { draw(cv.getContext('2d'), w, h, ...a); t.needsUpdate = true; }}; api.draw(); return api; },
+  glow() {
+    if (this._g) return this._g;
+    this._g = this.tex(64, 64, g => { const r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.3, 'rgba(255,255,255,.7)'); r.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); }).t;
+    return this._g;
+  },
+  badge(num, text, color) {
+    const t = this.tex(512, 112, (g, W, H, col, txt) => {
+      g.clearRect(0, 0, W, H);
+      g.fillStyle = 'rgba(12,20,30,.92)'; g.strokeStyle = col || color; g.lineWidth = 5;
+      g.beginPath(); if (g.roundRect) g.roundRect(4, 8, W - 8, H - 16, 18); else g.rect(4, 8, W - 8, H - 16); g.fill(); g.stroke();
+      g.fillStyle = col || color; g.beginPath(); if (g.roundRect) g.roundRect(16, 22, 68, 68, 12); else g.rect(16, 22, 68, 68); g.fill();
+      g.fillStyle = '#06131c'; g.font = '800 46px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(num, 50, 58);
+      g.fillStyle = '#e8f4ff'; g.textAlign = 'left'; g.font = '700 40px system-ui'; g.fillText(txt || text, 104, 58);
+    });
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({map: t.t, depthTest: false, transparent: true, sizeAttenuation: false}));
+    s.scale.set(0.105, 0.023, 1); s.renderOrder = 20; s.userData.tex = t; return s;
+  },
+  build() {
+    const T = THREE, sc = this.sc;
+    // Nền + lưới bản vẽ
+    const g = this.mesh(new T.PlaneGeometry(130, 90), '#222c38', 0, 0, -8); g.rotation.x = -Math.PI / 2;
+    const grid = new T.GridHelper(130, 65, 0x2c4a60, 0x243545); grid.position.set(0, 0.01, -8); grid.material.transparent = true; grid.material.opacity = 0.55; sc.add(grid);
+    // Đường + vỉa hè + vạch
+    ROADS.forEach(r => {
+      const horiz = r.a[1] === r.b[1], L = horiz ? r.b[0] - r.a[0] : r.b[1] - r.a[1], cx = (r.a[0] + r.b[0]) / 2, cz = (r.a[1] + r.b[1]) / 2;
+      const side = this.mesh(new T.PlaneGeometry(horiz ? L : 6.4, horiz ? 6.4 : L), '#3b4652', cx, 0.02, cz); side.rotation.x = -Math.PI / 2;
+      const road = this.mesh(new T.PlaneGeometry(horiz ? L : 3.4, horiz ? 3.4 : L), '#161c23', cx, 0.04, cz); road.rotation.x = -Math.PI / 2;
+      for (let d = -L / 2 + 1; d < L / 2; d += 3) {
+        const dash = this.mesh(new T.PlaneGeometry(horiz ? 1.2 : 0.12, horiz ? 0.12 : 1.2), '#8b97a3', horiz ? cx + d : cx, 0.05, horiz ? cz : cz + d); dash.rotation.x = -Math.PI / 2;
+      }
+    });
+    // Nhà cửa (khối sáng như bản vẽ), công viên
+    let seed = 7; const sr = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    const xs = [-36, -20, 4, 24, 36], zs = [-30, -18, 0, 14];
+    for (let i = 0; i < xs.length - 1; i++) for (let j = 0; j < zs.length - 1; j++) {
+      const x0 = xs[i] + 4, x1 = xs[i + 1] - 4, z0 = zs[j] + 4, z1 = zs[j + 1] - 4;
+      if (x1 - x0 < 3 || z1 - z0 < 3) continue;
+      const park = i === 1 && j === 1;
+      if (park) {
+        const p = this.mesh(new T.PlaneGeometry(x1 - x0, z1 - z0), '#2c4a35', (x0 + x1) / 2, 0.03, (z0 + z1) / 2); p.rotation.x = -Math.PI / 2;
+        for (let k = 0; k < 26; k++) { const tx = x0 + 1 + sr() * (x1 - x0 - 2), tz = z0 + 1 + sr() * (z1 - z0 - 2); this.mesh(new T.ConeGeometry(0.8, 2.2, 7), '#3f7a4f', tx, 1.5, tz); this.mesh(new T.CylinderGeometry(0.12, 0.12, 0.5, 6), '#6b4a2b', tx, 0.25, tz); }
+        continue;
+      }
+      if (i === 0 && j === 2) continue;   // chỗ đặt TBA
+      for (let x = x0; x < x1 - 1; x += 4.5 + sr() * 2) for (let z = z0; z < z1 - 1; z += 4.5 + sr() * 2) {
+        const w = Math.min(3.6, x1 - x), d = Math.min(3.6, z1 - z), h = 1.2 + sr() * 6;
+        this.mesh(new T.BoxGeometry(w, h, d), '#c8d1db', x + w / 2, h / 2, z + d / 2, {roughness: 0.9});
+      }
+    }
+    // TBA
+    const [tx, tz] = NET.tba.pos;
+    this.mesh(new T.BoxGeometry(6, 0.2, 5), '#59636e', tx, 0.1, tz);
+    const tr = this.mesh(new T.BoxGeometry(2.2, 2.2, 1.6), '#7f9a8a', tx, 1.3, tz); tr.userData = {kind: 'tba'};
+    for (let k = 0; k < 3; k++) this.mesh(new T.CylinderGeometry(0.15, 0.15, 0.9, 8), '#c9d4dc', tx - 0.6 + k * 0.6, 2.8, tz);
+    for (let a = 0; a < 4; a++) { const fx = a % 2 ? 6 : 0.08, fz = a % 2 ? 0.08 : 5; this.mesh(new T.BoxGeometry(fx, 1.2, fz), '#9aa7b2', tx + (a === 1 ? 0 : a === 3 ? 0 : (a === 0 ? -3 : 3)), 0.6, tz + (a === 1 ? -2.5 : a === 3 ? 2.5 : 0), {transparent: true, opacity: 0.5}); }
+    this.tbaBadge = this.badge('1', 'TBA 22/0,4kV', '#36c5f0'); this.tbaBadge.position.set(tx, 5, tz); sc.add(this.tbaBadge);
+
+    // Tủ, tuyến, cột
+    this.cabs = {}; this.posts = {}; this.segs = {}; this.flows = [];
+    const cv = (pts, y) => new T.CatmullRomCurve3(pts.map(p => new T.Vector3(p[0], y, p[1])), false, 'catmullrom', 0.01);
+    NET.cabs.forEach((c, ci) => {
+      const [x, z] = c.pos;
+      const body = this.mesh(new T.BoxGeometry(1.4, 2.0, 0.7), '#d5dbe1', x, 1.15, z); body.userData = {kind: 'cab', id: c.id};
+      this.mesh(new T.BoxGeometry(1.6, 0.15, 0.9), '#8a929a', x, 0.08, z);
+      const led = this.mesh(new T.SphereGeometry(0.12, 10, 10), '#34d399', x, 2.0, z + 0.36, {emissive: '#34d399', emissiveIntensity: 1});
+      const bd = this.badge(String(ci + 2), c.id, '#36c5f0'); bd.position.set(x, 4.2, z); sc.add(bd);
+      this.cabs[c.id] = {body, led, bd};
+      // cáp nguồn từ TBA
+      const fc = cv(c.feeder, 0.18);
+      const ft = new T.Mesh(new T.TubeGeometry(fc, 80, 0.13, 6, false), this.mat('#1e6f8a', {emissive: '#36c5f0', emissiveIntensity: 0.25}));
+      sc.add(ft); this.cabs[c.id].feed = ft;
+      this.flows.push({curve: fc, col: new T.Color('#7fe3ff'), len: fc.getLength(), n: Math.round(fc.getLength() * 0.6), I: () => S.grid ? S.cabs[c.id].I.reduce((a, b) => a + b, 0) + 2 : 0, speed: 1.6, ph: Math.random()});
+      c.routes.forEach(r => {
+        const pts = [c.pos].concat(r.posts);
+        this.posts[r.id] = []; this.segs[r.id] = [];
+        for (let i = 0; i < r.n; i++) {
+          const a = pts[i], b = pts[i + 1], mid = i === 0 ? [[a[0], a[1]], [r.path[0][0], r.path[0][1]], [b[0], b[1]]] : [[a[0], a[1]], [b[0], b[1]]];
+          const curve = cv(mid.filter((p, k, arr) => k === 0 || Math.hypot(p[0] - arr[k - 1][0], p[1] - arr[k - 1][1]) > 0.05), 0.14);
+          const tube = new T.Mesh(new T.TubeGeometry(curve, 24, 0.1, 6, false), this.mat('#7a4a1f', {emissive: '#f5a524', emissiveIntensity: 0.4}));
+          tube.userData = {kind: 'seg', route: r.id, idx: i}; sc.add(tube);
+          this.segs[r.id].push({tube, curve});
+          this.flows.push({curve, col: new T.Color('#ffb347'), len: curve.getLength(), n: Math.max(3, Math.round(curve.getLength() * 1.3)), I: () => this.segI(r, i), speed: 1.4, ph: Math.random()});
+          // cột đèn: cần hướng ra lòng đường
+          const [px, pz] = r.posts[i], horiz = Math.abs(r.path[0][1] - r.path[1][1]) < 0.01;
+          const roadDir = horiz ? (pz > (ROADS.find(R => R.a[1] === R.b[1] && Math.abs(R.a[1] - pz) < 3) || {a: [0, pz]}).a[1] ? -1 : 1) : (px > (ROADS.find(R => R.a[0] === R.b[0] && Math.abs(R.a[0] - px) < 3) || {a: [px]}).a[0] ? -1 : 1);
+          const grp = new T.Group(); grp.position.set(px, 0, pz); sc.add(grp);
+          const pole = this.mesh(new T.CylinderGeometry(0.07, 0.1, 3.2, 8), '#aab6c2', 0, 1.6, 0, null, grp);
+          const arm = this.mesh(new T.BoxGeometry(horiz ? 0.06 : 0.9, 0.06, horiz ? 0.9 : 0.06), '#aab6c2', horiz ? 0 : roadDir * 0.45, 3.18, horiz ? roadDir * 0.45 : 0, null, grp);
+          const head = this.mesh(new T.BoxGeometry(horiz ? 0.35 : 0.6, 0.12, horiz ? 0.6 : 0.35), '#3a4048', horiz ? 0 : roadDir * 0.9, 3.12, horiz ? roadDir * 0.9 : 0, {emissive: '#000'}, grp);
+          const glow = new T.Sprite(new T.SpriteMaterial({map: this.glow(), color: 0xffe9a6, transparent: true, depthWrite: false, blending: T.AdditiveBlending}));
+          glow.scale.set(1.6, 1.6, 1); glow.position.copy(head.position); grp.add(glow);
+          const pool = new T.Mesh(new T.CircleGeometry(2.4, 24), new T.MeshBasicMaterial({map: this.glow(), color: 0xffe2a0, transparent: true, opacity: 0.55, depthWrite: false, blending: T.AdditiveBlending}));
+          pool.rotation.x = -Math.PI / 2; pool.position.set(head.position.x, 0.07, head.position.z); grp.add(pool);
+          [pole, arm, head].forEach(m => { m.userData = {kind: 'post', route: r.id, idx: i}; });
+          this.posts[r.id].push({grp, head, glow, pool, horiz, roadDir});
+        }
+        const mid = r.posts[Math.floor(r.n / 2)];
+        const rb = this.badge(r.id, `K${r.ch + 1}`, '#f5a524'); rb.scale.set(0.062, 0.0135, 1); rb.position.set(mid[0], 4.4, mid[1]); sc.add(rb);
+        this.posts[r.id].badge = rb;
+      });
+    });
+    // Hạt dòng điện
+    let off = 0; this.flows.forEach(f => { f.off = off; off += f.n; });
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.BufferAttribute(new Float32Array(off * 3), 3));
+    geo.setAttribute('color', new T.BufferAttribute(new Float32Array(off * 3), 3));
+    this.pgeo = geo;
+    const P = new T.Points(geo, new T.PointsMaterial({size: 0.55, map: this.glow(), vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending}));
+    P.frustumCulled = false; sc.add(P);
+    // Tia lửa + vòng chọn + điểm đánh dấu + vùng ước tính
+    const sg = new T.BufferGeometry(); sg.setAttribute('position', new T.BufferAttribute(new Float32Array(60 * 3), 3)); sg.setAttribute('color', new T.BufferAttribute(new Float32Array(60 * 3), 3));
+    const SP = new T.Points(sg, new T.PointsMaterial({size: 0.45, map: this.glow(), vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending})); SP.frustumCulled = false; sc.add(SP);
+    this.sparks = {geo: sg, p: Array.from({length: 60}, () => ({x: 0, y: -9, z: 0, vx: 0, vy: 0, vz: 0, l: 0}))};
+    this.ring = new T.Mesh(new T.RingGeometry(1.1, 1.45, 32), new T.MeshBasicMaterial({color: 0x36c5f0, transparent: true, opacity: 0.9, side: T.DoubleSide, depthTest: false}));
+    this.ring.rotation.x = -Math.PI / 2; this.ring.visible = false; this.ring.renderOrder = 15; sc.add(this.ring);
+    this.estZone = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({color: 0xf87171, transparent: true, opacity: 0.35, depthWrite: false}));
+    this.estZone.rotation.x = -Math.PI / 2; this.estZone.visible = false; sc.add(this.estZone);
+    this.pins = new T.Group(); sc.add(this.pins);
+  },
+  segI(r, i) {
+    const rs = S.cabs[r.cab].routes[r.id];
+    if (View.fog) return 0;              // che hiện trường: không lộ dòng trên từng đoạn
+    return rs.segI[i] || 0;
+  },
+  bind() {
+    const el = this.R.domElement;
+    el.addEventListener('contextmenu', e => e.preventDefault());
+    el.addEventListener('pointerdown', e => { el.setPointerCapture(e.pointerId); this.pts.set(e.pointerId, {x: e.clientX, y: e.clientY, b: e.button, sh: e.shiftKey}); this.down = {x: e.clientX, y: e.clientY, t: Date.now()}; this.goal = null; });
+    el.addEventListener('pointermove', e => {
+      const p = this.pts.get(e.pointerId); if (!p) return;
+      const dx = e.clientX - p.x, dy = e.clientY - p.y, c = this.cam;
+      if (this.pts.size === 1) {
+        if (p.b === 2 || p.sh) this.pan(dx, dy);
+        else { c.theta -= dx * 0.006; c.phi = Math.min(1.45, Math.max(0.25, c.phi - dy * 0.005)); }
+      } else if (this.pts.size === 2) {
+        const [a, b] = [...this.pts.values()], d0 = Math.hypot(a.x - b.x, a.y - b.y), m0 = [(a.x + b.x) / 2, (a.y + b.y) / 2];
+        p.x = e.clientX; p.y = e.clientY;
+        const [a2, b2] = [...this.pts.values()], d1 = Math.hypot(a2.x - b2.x, a2.y - b2.y), m1 = [(a2.x + b2.x) / 2, (a2.y + b2.y) / 2];
+        if (d0 > 0 && d1 > 0) c.r = Math.min(140, Math.max(6, c.r * d0 / d1));
+        this.pan(m1[0] - m0[0], m1[1] - m0[1]); return;
+      }
+      p.x = e.clientX; p.y = e.clientY;
+    });
+    const up = e => {
+      this.pts.delete(e.pointerId);
+      if (this.down && e.type === 'pointerup' && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) < 7 && Date.now() - this.down.t < 450) this.pick(e);
+      this.down = null;
+    };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    el.addEventListener('wheel', e => { e.preventDefault(); this.goal = null; this.cam.r = Math.min(140, Math.max(6, this.cam.r * (e.deltaY > 0 ? 1.1 : 0.9))); }, {passive: false});
+    el.addEventListener('dblclick', () => { if (View.sel) this.focusSel(); });
+  },
+  pan(dx, dy) {
+    const c = this.cam, k = c.r * 0.0016;
+    const fx = Math.sin(c.theta), fz = Math.cos(c.theta);
+    c.tx += (-dx * fz - dy * fx) * k; c.tz += (dx * fx - dy * fz) * k;
+  },
+  resize() {
+    if (!this.R) return;
+    const el = $('#c3d'), w = el.clientWidth, h = el.clientHeight; if (!w || !h) return;
+    this.R.setSize(w, h, false); this.cam3.aspect = w / h; this.cam3.updateProjectionMatrix();
+  },
+  home() { this.goal = {theta: -0.55, phi: 0.92, r: $('#c3d').clientWidth < $('#c3d').clientHeight ? 110 : 78, tx: 0, ty: 0, tz: -8}; },
+  focusAt(x, z, r = 22) { this.goal = {theta: this.cam.theta, phi: 0.62, r, tx: x, ty: 0, tz: z}; },
+  focusSel() {
+    const s = View.sel; if (!s) return;
+    if (s.kind === 'tba') this.focusAt(NET.tba.pos[0], NET.tba.pos[1], 20);
+    if (s.kind === 'cab') { const c = NET.cabs.find(x => x.id === s.id); this.focusAt(c.pos[0], c.pos[1], 18); }
+    if (s.kind === 'post' || s.kind === 'seg') { const p = ROUTES[s.route].posts[s.idx]; this.focusAt(p[0], p[1], 16); }
+  },
+  pick(e) {
+    const rc = this.R.domElement.getBoundingClientRect();
+    this.ray.setFromCamera(new THREE.Vector2((e.clientX - rc.left) / rc.width * 2 - 1, -(e.clientY - rc.top) / rc.height * 2 + 1), this.cam3);
+    const hit = this.ray.intersectObjects(this.sc.children, true).find(h => { let o = h.object; while (o && !o.userData.kind) o = o.parent; return !!o; });
+    if (!hit) { select(null); return; }
+    let o = hit.object; while (!o.userData.kind) o = o.parent;
+    select(Object.assign({}, o.userData));
+  },
+  frame(ts) {
+    requestAnimationFrame(t => this.frame(t));
+    if (!this.ok || !$('#c3d').clientWidth) return;
+    const time = ts / 1000, dt = Math.min(0.1, time - (this.lt || time)); this.lt = time;
+    const c = this.cam;
+    if (this.goal) { let done = true; for (const k in this.goal) { const d = this.goal[k] - c[k]; c[k] += d * 0.08; if (Math.abs(d) > 0.01) done = false; } if (done) this.goal = null; }
+    this.cam3.position.set(c.tx + c.r * Math.sin(c.phi) * Math.sin(c.theta), c.ty + c.r * Math.cos(c.phi), c.tz + c.r * Math.sin(c.phi) * Math.cos(c.theta));
+    this.cam3.lookAt(c.tx, c.ty, c.tz);
+    this.update(time, dt);
+    this.R.render(this.sc, this.cam3);
+  },
+  update(time, dt) {
+    const T = THREE, night = Clock.night(), pulse = 0.5 + 0.5 * Math.sin(time * 6), fog = View.fog;
+    this.sc.background.set(night ? '#0d151e' : '#2a3a4c');
+    this.hemi.intensity = night ? 0.45 : 0.95; this.sun.intensity = night ? 0.2 : 0.75;
+    // Tủ: đèn trạng thái + huy hiệu
+    NET.cabs.forEach((c, ci) => {
+      const o = this.cabs[c.id], cs = S.cabs[c.id];
+      const al = Object.values(ALARMS).filter(a => a.active && a.tag.startsWith(c.id));
+      const col = al.length ? '#f87171' : (S.grid && cs.cb ? '#34d399' : '#5b6b7b');
+      o.led.material.color.set(col); o.led.material.emissive.set(col); o.led.material.emissiveIntensity = al.length ? pulse : 1;
+      const key = al.length ? 'bad' : 'ok';
+      if (o.bdKey !== key) { o.bdKey = key; o.bd.userData.tex.draw(al.length ? '#f87171' : '#36c5f0', al.length ? `${c.id} ⚠${al.length}` : c.id); }
+      o.feed.material.emissiveIntensity = S.grid ? 0.35 : 0; o.feed.material.color.set(S.grid ? '#1e6f8a' : '#3a434d');
+      c.routes.forEach(r => {
+        const rs = cs.routes[r.id];
+        r.posts.forEach((_, i) => {
+          const P = this.posts[r.id][i], seg = this.segs[r.id][i];
+          const lit = fog ? (rs.energ) : rs.lit[i];
+          P.glow.visible = lit && night; P.pool.visible = lit && night;
+          P.head.material.emissive.set(lit ? '#ffe9a6' : '#000'); P.head.material.emissiveIntensity = lit ? 1 : 0;
+          // cột đổ (chỉ thấy khi không che hiện trường)
+          const down = !fog && rs.down === i;
+          const tgt = down ? 1.35 : 0;
+          if (P.horiz) P.grp.rotation.x += ((P.roadDir > 0 ? tgt : -tgt) - P.grp.rotation.x) * 0.1; else P.grp.rotation.z += ((P.roadDir > 0 ? -tgt : tgt) - P.grp.rotation.z) * 0.1;
+          // cáp từng đoạn
+          const segOn = fog ? rs.energ : (rs.energ && (rs.cut === null || i < rs.cut));
+          const cutHere = !fog && rs.cut === i;
+          seg.tube.material.color.set(cutHere ? '#5a1d1d' : segOn ? '#7a4a1f' : '#3a414a');
+          seg.tube.material.emissive.set(cutHere ? '#ff3030' : '#f5a524'); seg.tube.material.emissiveIntensity = cutHere ? pulse * 0.8 : segOn ? 0.45 : 0;
+        });
+        const al2 = Object.values(ALARMS).find(a => a.active && a.route === r.id);
+        const pb = this.posts[r.id].badge, k2 = al2 ? 'bad' : 'ok';
+        if (pb.key !== k2) { pb.key = k2; pb.userData.tex.draw(al2 ? '#f87171' : '#f5a524', al2 ? `K${r.ch + 1} ⚠` : `K${r.ch + 1}`); }
+      });
+    });
+    const tbaKey = S.grid ? 'ok' : 'bad';
+    if (this.tbaKey !== tbaKey) { this.tbaKey = tbaKey; this.tbaBadge.userData.tex.draw(S.grid ? '#36c5f0' : '#f87171', S.grid ? 'TBA 22/0,4kV' : 'TBA ⚠ MẤT ĐIỆN'); }
+    // Dòng điện chạy trong cáp
+    const pos = this.pgeo.attributes.position.array, col = this.pgeo.attributes.color.array, tmp = this._t || (this._t = new T.Vector3());
+    this.flows.forEach(f => {
+      const I = View.flow ? Math.max(0, f.I()) : 0;
+      const nVis = I > 0.2 ? Math.max(2, Math.round(f.n * Math.min(1, 0.3 + I / 10))) : 0;
+      f.ph = (f.ph + dt * (0.6 + Math.min(I, 20) * 0.25) * f.speed / f.len) % 1;
+      for (let j = 0; j < f.n; j++) {
+        const o = (f.off + j) * 3;
+        if (j < nVis) { f.curve.getPointAt((f.ph + j / nVis) % 1, tmp); pos[o] = tmp.x; pos[o + 1] = tmp.y + 0.12; pos[o + 2] = tmp.z; col[o] = f.col.r; col[o + 1] = f.col.g; col[o + 2] = f.col.b; }
+        else { col[o] = col[o + 1] = col[o + 2] = 0; pos[o + 1] = -50; }
+      }
+    });
+    this.pgeo.attributes.position.needsUpdate = true; this.pgeo.attributes.color.needsUpdate = true;
+    // Tia lửa tại điểm đứt (chỉ khi không che hiện trường)
+    const cuts = [];
+    if (!fog) Object.values(ROUTES).forEach(r => { const rs = S.cabs[r.cab].routes[r.id]; if (rs.cut !== null && rs.energ) { const p = this.segs[r.id][rs.cut].curve.getPointAt(0.5); cuts.push(p); } });
+    const sp = this.sparks.geo.attributes.position.array, sc2 = this.sparks.geo.attributes.color.array;
+    this.sparks.p.forEach((p, n) => {
+      p.l -= dt;
+      if (p.l <= 0 && cuts.length && Math.random() < 0.3) { const c0 = cuts[n % cuts.length]; Object.assign(p, {x: c0.x, y: 0.25, z: c0.z, vx: rnd(-2, 2), vy: rnd(2, 5), vz: rnd(-2, 2), l: rnd(0.3, 0.7)}); }
+      if (p.l > 0) { p.vy -= 12 * dt; p.x += p.vx * dt; p.y = Math.max(0.1, p.y + p.vy * dt); p.z += p.vz * dt; }
+      sp[n * 3] = p.x; sp[n * 3 + 1] = p.l > 0 ? p.y : -50; sp[n * 3 + 2] = p.z;
+      const b = Math.max(0, p.l) * 2; sc2[n * 3] = b; sc2[n * 3 + 1] = b * 0.7; sc2[n * 3 + 2] = b * 0.2;
+    });
+    this.sparks.geo.attributes.position.needsUpdate = true; this.sparks.geo.attributes.color.needsUpdate = true;
+    // Vùng nghi sự cố do SCADA ước tính (luôn hiện – đây là thông tin vận hành viên có)
+    const est = Object.values(ALARMS).find(a => a.active && (a.code === 'CAT_CAP' || a.code === 'MAT_DIEN_TUYEN'));
+    if (est) {
+      const r = ROUTES[est.route], e = est.extra ? est.extra.est : 0, seg = this.segs[r.id][Math.min(r.n - 1, e)];
+      const a = seg.curve.getPointAt(0), b = seg.curve.getPointAt(1);
+      this.estZone.visible = true; this.estZone.position.set((a.x + b.x) / 2, 0.09, (a.z + b.z) / 2);
+      const len = Math.hypot(a.x - b.x, a.z - b.z) + 2; this.estZone.rotation.z = -Math.atan2(b.z - a.z, b.x - a.x);
+      this.estZone.scale.set(len, 2.6, 1); this.estZone.material.opacity = 0.18 + pulse * 0.25;
+    } else this.estZone.visible = false;
+    // Vòng chọn
+    const s = View.sel;
+    if (s) {
+      let x, z;
+      if (s.kind === 'tba') [x, z] = NET.tba.pos; else if (s.kind === 'cab') [x, z] = NET.cabs.find(c => c.id === s.id).pos; else [x, z] = ROUTES[s.route].posts[s.idx];
+      this.ring.visible = true; this.ring.position.set(x, 0.12, z); this.ring.scale.setScalar(1 + pulse * 0.15);
+    } else this.ring.visible = false;
+    // Ghim đánh dấu
+    if (this.pinN !== marks.length) {
+      this.pinN = marks.length; while (this.pins.children.length) this.pins.remove(this.pins.children[0]);
+      marks.forEach(m => { const p = ROUTES[m.route].posts[m.idx]; const pin = new T.Mesh(new T.ConeGeometry(0.35, 1.1, 10), new T.MeshBasicMaterial({color: 0x36c5f0})); pin.rotation.x = Math.PI; pin.position.set(p[0], 4.0, p[1]); this.pins.add(pin); });
+    }
+    this.pins.children.forEach((p, i) => { p.position.y = 4 + Math.sin(time * 3 + i) * 0.25; });
+  }
+};
+
+/* =====================================================================
+   11. CHỌN ĐỐI TƯỢNG + GIAO DIỆN CHUNG
+   ===================================================================== */
+function select(s) {
+  View.sel = s; renderInfo();
+}
+function renderInfo() {
+  const box = $('#info3d'), s = View.sel;
+  if (!s) { box.hidden = true; return; }
+  box.hidden = false;
+  if (s.kind === 'tba') {
+    box.innerHTML = `<div class="row"><b class="grow">① ${esc(NET.tba.name)}</b><button class="btn sm" data-act="unsel">✕</button></div>
+      <div class="sub">Lưới: <b style="color:${S.grid ? 'var(--ok)' : 'var(--bad)'}">${S.grid ? 'có điện' : 'MẤT ĐIỆN'}</b></div>
+      <div class="row" style="margin-top:6px"><button class="btn sm pri" data-act="fp" data-fp="tba">Mở bảng TBA</button><button class="btn sm" data-act="focus">🔍 Phóng tới</button></div>`;
+  } else if (s.kind === 'cab') {
+    const c = NET.cabs.find(x => x.id === s.id), cs = S.cabs[s.id];
+    box.innerHTML = `<div class="row"><b class="grow">${esc(c.id)} · ${esc(c.name)}</b><button class="btn sm" data-act="unsel">✕</button></div>
+      <div class="sub mono">U ${cs.V.map(v => num(v, 0)).join('/')} V · I ${cs.I.map(v => num(v, 1)).join('/')} A · ${cs.mode === 'auto' ? 'TỰ ĐỘNG' : 'TỪ XA'}</div>
+      <div class="sub">${c.routes.map(r => `${r.id} K${r.ch + 1}: ${cs.fb[r.ch] ? '🟡 sáng' : '⚫ tắt'}`).join(' · ')}</div>
+      <div class="row" style="margin-top:6px"><button class="btn sm pri" data-act="fp" data-fp="cab:${c.id}">Mở bảng điều khiển</button><button class="btn sm" data-act="focus">🔍 Phóng tới</button></div>`;
+  } else {
+    const r = ROUTES[s.route], cs = S.cabs[r.cab], rs = cs.routes[r.id];
+    box.innerHTML = `<div class="row"><b class="grow">${s.kind === 'seg' ? 'Cáp trước' : ''} Cột #${s.idx + 1} · ${r.id} · ${esc(r.name)}</b><button class="btn sm" data-act="unsel">✕</button></div>
+      <div class="sub">${r.cab} · ${CH_NAME[r.ch]} · pha ${'ABC'[s.idx % 3]} · cách tủ ≈ ${r.distM[s.idx]} m · dòng tuyến ${num(rs.I.reduce((a, b) => a + b, 0), 1)} A</div>
+      <div class="row" style="margin-top:6px"><button class="btn sm pri" data-act="fp" data-fp="post:${r.id}:${s.idx}">📍 Đánh dấu…</button><button class="btn sm" data-act="focus">🔍 Phóng tới</button></div>`;
+  }
+}
+function openFpTag(tag) {
+  const [k, a, b] = tag.split(':');
+  if (k === 'tba') fpTba();
+  else if (k === 'cab') fpCab(a);
+  else if (k === 'cbn') fpCab(a);
+  else if (k === 'k') fpCab(a);
+  else if (k === 'post') { fpPost(a, +b); select({kind: 'post', route: a, idx: +b}); }
+}
+let curTab = 'scada';
+function setTab(t) {
+  curTab = t;
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + t));
+  ui();
+}
+function setMobile(m) {
+  document.querySelectorAll('nav.mob button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+  document.body.classList.toggle('m-3d', m === '3d');
+  if (m !== '3d') setTab(m);
+  setTimeout(() => G3.resize(), 30);
+}
+function ui() {
+  const d = new Date(Clock.ms);
+  $('#clk').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  $('#dayIco').textContent = Clock.night() ? '🌙' : '☀️';
+  const active = document.activeElement, typing = active && ['INPUT', 'SELECT'].includes(active.tagName) && $('#paneSide').contains(active);
+  if (curTab === 'scada') renderScada();
+  if (!typing) { renderAlarms(); if (curTab === 'train') renderTrain(); }
+  else { const unack = Object.values(ALARMS).filter(a => !a.acked).length; [$('#cntA'), $('#cntM')].forEach(e => { e.hidden = !unack; e.textContent = unack; }); }
+  if (View.sel) renderInfo();
+}
+
+/* ---------- Sự kiện ---------- */
+document.addEventListener('click', e => {
+  const fpEl = e.target.closest('[data-fp]');
+  if (fpEl && !fpEl.dataset.act) { openFpTag(fpEl.dataset.fp); return; }
+  const el = e.target.closest('[data-act]'); if (!el || el.tagName === 'SELECT') return;
+  const a = el.dataset.act;
+  switch (a) {
+    case 'fp': openFpTag(el.dataset.fp); break;
+    case 'fp-close': closeFp(); break;
+    case 'k': { const cab = el.dataset.cab, ch = +el.dataset.ch, v = +el.dataset.val; confirmBox(`${v ? 'ĐÓNG' : 'CẮT'} <b>${CH_NAME[ch]}</b> tại tủ <b>${cab}</b>?`, () => cmdK(cab, ch, v)); break; }
+    case 'auto': { const cab = el.dataset.cab; confirmBox(`Trả tủ <b>${cab}</b> về <b>chạy tự động theo lịch</b>?`, () => cmdAuto(cab)); break; }
+    case 'cb': { const cab = el.dataset.cab; confirmBox(`Đóng lại <b>CB tổng</b> tủ ${cab}? Chỉ đóng khi đã rõ nguyên nhân nhảy.`, () => resetCB(cab, null)); break; }
+    case 'cbn': { const cab = el.dataset.cab, r = el.dataset.route; confirmBox(`Đóng lại <b>CB nhánh ${r}</b>? Chỉ đóng khi tổ đã xử lý xong và không còn người ở vị trí sự cố.`, () => resetCB(cab, r)); break; }
+    case 'callGrid': closeFp(); callGrid(); break;
+    case 'mark': closeFp(); markLocation(el.dataset.route, +el.dataset.idx, el.dataset.kind); break;
+    case 'ack': ackAlarm(el.dataset.key); break;
+    case 'ackAll': Object.keys(ALARMS).forEach(ackAlarm); break;
+    case 'goto': { const r = el.dataset.route, i = +el.dataset.idx; select({kind: 'post', route: r, idx: i}); G3.focusSel(); if (innerWidth < 900) setMobile('3d'); break; }
+    case 'home': G3.home(); break;
+    case 'focus': G3.focusSel(); break;
+    case 'unsel': select(null); break;
+    case 'flow': View.flow = !View.flow; el.classList.toggle('on', View.flow); break;
+    case 'fog': View.setFog(!View.fog); toast(View.fog ? '🌫️ Che hiện trường: chỉ thấy những gì SCADA biết' : 'Hiện trường thật đang hiển thị'); break;
+    case 'train': {
+      const n = $('#tName'); if (n) { Train.name = n.value.trim(); store.set('csmap.name', Train.name); }
+      const ex = $('#tExam'); if (ex) Train.exam = ex.checked;
+      Train.start(el.dataset.id); break;
+    }
+    case 'finish': Train.finish(); break;
+    case 'quit': Train.quit(); break;
+    case 'confirm': Train.log('confirm', {}); ui(); break;
+    case 'fx': freeFault(el.dataset.f); break;
+    case 'jump': Clock.set(+el.dataset.h, +el.dataset.m, 30); step(); ui(); break;
+    case 'exportRes': {
+      const rows = [['Học viên', 'Bài', 'Điểm', 'Thời gian (giây)', 'Sát hạch', 'Ngày']].concat(Train.hist.map(h => [h.name, h.scen, h.score, h.sec, h.exam ? 'Có' : '', h.date]));
+      const blob = new Blob(['﻿' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n')], {type: 'text/csv;charset=utf-8'});
+      const l = document.createElement('a'); l.href = URL.createObjectURL(blob); l.download = 'ket-qua-dao-tao.csv'; document.body.appendChild(l); l.click(); l.remove(); break;
+    }
+  }
+});
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.dataset.act === 'dispatch' && el.value) { dispatch(el.dataset.key, el.value); }
+  if (el.id === 'speed') Clock.speed = +el.value;
+  if (el.id === 'tName') { Train.name = el.value.trim(); store.set('csmap.name', Train.name); }
+  if (el.id === 'tExam') Train.exam = el.checked;
+});
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+document.querySelectorAll('nav.mob button').forEach(b => b.onclick = () => setMobile(b.dataset.m));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFp(); if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('scen')) e.target.click(); });
+
+/* ---------- Khởi động ---------- */
+initState();
+for (let i = 0; i < 6; i++) step();
+ui();
+G3.init().then(() => G3.home());
+setInterval(() => { Clock.ms += 1000 * Clock.speed; step(); ui(); }, 1000);
+</script>
+</body>
+</html>
