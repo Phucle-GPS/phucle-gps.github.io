@@ -94,7 +94,8 @@ App chờ `ack` tối đa 10 giây. Không có phản hồi thì báo "Tủ khô
 
 ## 5. Logic phát hiện chính
 
-- **Cắt/trộm cáp**: có kênh đang đóng, pha đó đã từng có tải (≥1A), nay dòng <0.2A trong khi điện áp vẫn ≥180V suốt 3 giây.
+- **Cắt/trộm cáp**: có kênh đang đóng, điện áp pha vẫn ≥180V nhưng dòng <0.2A suốt 3 giây, khi pha đó đã từng có tải **hoặc** (sau 30 giây khởi động) các pha khác đang có tải. Vế sau bắt được trường hợp cáp bị cắt ban ngày, tối bật đèn mới lộ, hoặc bị cắt đúng lúc tủ chuyển kênh.
+  > Nếu tủ thiết kế có pha không mang tải thì cần tắt kiểm tra cho pha đó, nếu không sẽ báo nhầm.
 - **Mất điện lưới**: cả 3 pha <100V mà CB tổng vẫn đóng. **CB tổng nhảy** thì báo riêng.
 - **Contactor không đóng / dính**: lệnh DO và tiếp điểm phản hồi DI lệch nhau 5 giây.
 - **Đèn không sáng**: contactor đã đóng, có điện áp, nhưng sau 30 giây không có dòng (đứt CB nhánh, cầu chì, cáp).

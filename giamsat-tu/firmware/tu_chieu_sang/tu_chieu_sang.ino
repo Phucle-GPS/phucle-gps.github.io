@@ -386,11 +386,17 @@ void analyze() {
   }
 
   // --- Dòng điện ---
+  for (int k = 0; k < 3; k++)
+    if (anyOn && ph[k].ok && ph[k].i >= I_LOADED) { phaseWasLoaded[k] = true; anyLoadSinceChange = true; }
   for (int k = 0; k < 3; k++) {
     bool vOk = ph[k].ok && ph[k].v >= V_MIN_OK;
-    if (anyOn && ph[k].ok && ph[k].i >= I_LOADED) { phaseWasLoaded[k] = true; anyLoadSinceChange = true; }
-    evalAlarm((AlarmId)(AL_CAT_CAP_A + k), anyOn && phaseWasLoaded[k] && vOk && ph[k].i < I_ZERO, DEBOUNCE_N,
-              "Pha dang tai bi mat dong, dien ap con - nghi cat/trom cap", "Pha da co dong tro lai");
+    // Pha khác đang có tải mà pha này không có dòng (sau thời gian chờ) -> cáp pha này có thể đã bị cắt
+    // từ trước khi bật đèn, hoặc bị cắt đúng lúc tủ chuyển kênh
+    bool otherLoaded = false;
+    for (int j = 0; j < 3; j++) if (j != k && ph[j].ok && ph[j].i >= I_LOADED) otherLoaded = true;
+    bool dead = anyOn && vOk && ph[k].i < I_ZERO && (phaseWasLoaded[k] || (settled && otherLoaded));
+    evalAlarm((AlarmId)(AL_CAT_CAP_A + k), dead, DEBOUNCE_N,
+              "Pha khong co dong, dien ap con - nghi cat/trom cap", "Pha da co dong tro lai");
   }
   float iSum = ph[0].i + ph[1].i + ph[2].i;
   bool fbOk = !alarms[AL_K1_KHONG_DONG].active && !alarms[AL_K2_KHONG_DONG].active;

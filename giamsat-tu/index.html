@@ -160,7 +160,11 @@ canvas{width:100%;height:170px;display:block;background:var(--soft);border-radiu
 pre.report{white-space:pre-wrap;background:var(--soft);padding:10px;border-radius:10px;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace}
 .v3wrap{padding:0;overflow:hidden;position:relative}
 #v3d{height:min(62vh,560px);background:var(--soft)}
-.v3tools{position:absolute;top:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.v3legend{position:absolute;left:10px;top:10px;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:11.5px;color:#fff;background:rgba(0,0,0,.5);padding:4px 9px;border-radius:8px;max-width:calc(100% - 20px);pointer-events:none}
+.v3legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px;box-shadow:0 0 6px currentColor}
+.v3legend em{font-style:normal;opacity:.85}
+@media (max-width:560px){.v3legend em{display:none}}
+.v3tools{position:absolute;top:44px;right:10px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .v3hint{position:absolute;left:10px;bottom:10px;font-size:11.5px;color:#fff;background:rgba(0,0,0,.5);padding:3px 8px;border-radius:8px;max-width:calc(100% - 20px);pointer-events:none}
 .v3info:not([hidden])~.v3hint,.v3hint:has(~.v3info:not([hidden])){display:none}
 .v3info{position:absolute;left:10px;right:10px;bottom:10px;background:var(--card);border-radius:12px;padding:10px 12px;box-shadow:0 4px 18px rgba(0,0,0,.25);max-height:48%;overflow:auto}
@@ -381,10 +385,12 @@ class SimDevice {
       this.ev('KD' + c, 'K_KHONG_DONG', String(c + 1), !localManual && allVOk && this.doState[c] && !fb, CFG.FB_DEBOUNCE_N, 'Đã ra lệnh đóng nhưng contactor không đóng', 'Contactor đã đóng');
       this.ev('KC' + c, 'K_KHONG_CAT', String(c + 1), !localManual && !this.doState[c] && fb, CFG.FB_DEBOUNCE_N, 'Đã ra lệnh cắt nhưng contactor vẫn đóng', 'Contactor đã cắt');
     }
+    for (let k = 0; k < 3; k++) if (anyOn && ph[k].ok && ph[k].i >= CFG.I_LOADED) { this.loaded[k] = true; this.anyLoad = true; }
     for (let k = 0; k < 3; k++) {
       const vOk = ph[k].ok && ph[k].v >= CFG.V_MIN_OK;
-      if (anyOn && ph[k].ok && ph[k].i >= CFG.I_LOADED) { this.loaded[k] = true; this.anyLoad = true; }
-      this.ev('CAT' + k, 'CAT_CAP', 'ABC'[k], anyOn && this.loaded[k] && vOk && ph[k].i < CFG.I_ZERO, CFG.DEBOUNCE_N, 'Pha đang tải bị mất dòng, điện áp còn – nghi cắt/trộm cáp', 'Pha đã có dòng trở lại');
+      const otherLoaded = ph.some((p, j) => j !== k && p.ok && p.i >= CFG.I_LOADED);
+      const dead = anyOn && vOk && ph[k].i < CFG.I_ZERO && (this.loaded[k] || (settled && otherLoaded));
+      this.ev('CAT' + k, 'CAT_CAP', 'ABC'[k], dead, CFG.DEBOUNCE_N, 'Pha không có dòng, điện áp còn – nghi cắt/trộm cáp', 'Pha đã có dòng trở lại');
     }
     const iSum = ph.reduce((s, p) => s + (p.ok ? p.i : 0), 0);
     const fbOk = !this.alarms.KD0?.active && !this.alarms.KD1?.active;
@@ -1245,6 +1251,7 @@ document.addEventListener('click', async e => {
     case 'v3-focus': V3.select(el.dataset.seg); document.getElementById('v3d')?.scrollIntoView({behavior: 'smooth', block: 'center'}); break;
     case 'v3-home': V3.sel = null; V3.home(); V3.tick(); break;
     case 'v3-close': V3.sel = null; V3.tick(); break;
+    case 'v3-flow': V3.showFlow = V3.showFlow === false; el.textContent = V3.showFlow ? '⚡ Ẩn dòng điện' : '⚡ Hiện dòng điện'; break;
     case 'v3-see': V3.seeThrough = !V3.seeThrough; el.textContent = V3.seeThrough ? '🚪 Hiện cửa' : '👁️ Nhìn xuyên'; break;
     case 'v3-report': {
       const r = segReport(App.cabs[V3.key]);
@@ -1549,6 +1556,7 @@ const V3 = {
     const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p)), false, 'catmullrom', 0.1);
     const m = this.add(new THREE.TubeGeometry(curve, Math.max(24, points.length * 12), r, 8, false), color, 0, 0, 0, parent, seg, o);
     m.userData.hl = false;     // dây: trạng thái thể hiện bằng màu riêng, không nhấp nháy chung
+    m.userData.curve = curve;
     return m;
   },
   canvasTex(w, h, draw) {
@@ -1671,7 +1679,7 @@ const V3 = {
     this.P.inCable = [0, 1, 2].map(k => this.tube([[-2.6, 0.02, 0.12 + k * 0.05], [-1.2, 0.02, 0.12 + k * 0.05], [-0.7, 0.03, 0.05 + k * 0.03],
       [-0.47 + k * 0.03, 0.25, -0.1], [-0.47 + k * 0.03, 1.74, -0.1], [-0.38 + k * 0.05, 1.77, -0.1], [-0.38 + k * 0.05, 1.735, -0.1]], 0.012, PH[k], G, 'nguon'));
     // CB → CT → thanh cái
-    [0, 1, 2].forEach(k => this.tube([[-0.38 + k * 0.05, 1.47, -0.1], [wx[k], 1.42, -0.1], [wx[k], 1.2, -0.1], [-0.42, 1.07 + k * 0.022, -0.1]], 0.009, PH[k], G, 'nguon'));
+    this.P.mid = [0, 1, 2].map(k => this.tube([[-0.38 + k * 0.05, 1.47, -0.1], [wx[k], 1.42, -0.1], [wx[k], 1.2, -0.1], [-0.42, 1.07 + k * 0.022, -0.1]], 0.009, PH[k], G, 'nguon'));
 
     // Cáp ra đường: đoạn trước điểm cắt + đoạn sau điểm cắt
     const CUT = 3.3;
@@ -1700,6 +1708,7 @@ const V3 = {
       this.P.posts.push({head, cone, ch, ph});
     }
     this.anchors.den = new T.Vector3(1.9 + 2 * 1.45, 3.45, 1.7);
+    this.buildFlow(PH, wx);
     // Cây trang trí (K3)
     this.add(new T.ConeGeometry(0.35, 1.0, 10), '#2f6b3a', -1.2, 0.75, 1.2, S, 'den');
     this.box(0.08, 0.3, 0.08, '#6b4a2b', -1.2, 0.15, 1.2, S, 'den');
@@ -1722,6 +1731,7 @@ const V3 = {
     this.box(0.025, 0.1, 0.03, '#d63a3a', 0, 0, 0.025, sw, 'selector');
     this.label('TAY      TỰ ĐỘNG', 0.32, 0.05, door, 0.6, 0.15, 0.022, {fg: '#17212b', size: 0.6});
     this.doorAngle = 0;
+    this.P.doorDecor = door.children.filter(c => c !== this.P.doorPanel);
 
     // Nhãn cảnh báo nổi
     SEGS.forEach(s => {
@@ -1729,6 +1739,115 @@ const V3 = {
       m.userData.seg = s.id; m.visible = false; S.add(m); this.markers[s.id] = m;
     });
     this.needHome = true;
+  },
+
+  /* ---------- Dòng điện chạy trong dây ----------
+     Mỗi đoạn dây là một "luồng": hạt sáng chạy từ nguồn về tải.
+     Tốc độ và mật độ hạt tỉ lệ với dòng điện đo được (A). */
+  glowTex() {
+    if (this._glow) return this._glow;
+    const t = this.canvasTex(64, 64, g => {
+      const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.35, 'rgba(255,255,255,.85)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+    });
+    return (this._glow = t.tex);
+  },
+  buildFlow(PH, wx) {
+    const T = THREE, V = a => new T.Vector3(...a);
+    const curveOf = pts => new T.CatmullRomCurve3(pts.map(V), false, 'catmullrom', 0.1);
+    this.flows = []; this.showFlow = this.showFlow !== false;
+    const add = (curve, inCab, color, getI, speed, dens) => {
+      const len = curve.getLength(), n = Math.max(4, Math.min(60, Math.round(len * dens)));
+      this.flows.push({curve, inCab, col: new T.Color(color), getI, speed, len, n, ph: Math.random()});
+    };
+    // Lưới → CB, CB → CT → thanh cái (3 pha)
+    [0, 1, 2].forEach(k => {
+      add(this.P.inCable[k].userData.curve, true, PH[k], c => c.vOk[k] ? c.i[k] : 0, 1.6, 9);
+      add(this.P.mid[k].userData.curve, true, PH[k], c => c.i[k], 1, 24);
+    });
+    // Thanh cái → qua contactor → hàng kẹp (dòng mỗi kênh: ước tính theo tỉ lệ tải)
+    this.P.kx.forEach((x, c) => add(curveOf([[x, 1.07 + 0.044, -0.1], [x, 1.03, -0.06], [x, 0.9, -0.035], [x, 0.8, -0.06], [x, 0.7, -0.09], [x, 0.62, -0.08], [(c - 1.5) * 0.12, 0.52, -0.08]]),
+      true, '#ffe08a', ctx => ctx.kI[c], 1, 26));
+    // Cáp ra đường: trước và sau điểm nghi cắt
+    [0, 1, 2].forEach(k => {
+      add(this.P.outA[k].userData.curve, false, PH[k], c => c.i[k], 3.2, 3.2);
+      add(this.P.outB[k].userData.curve, false, PH[k], c => c.cut[k] ? 0 : c.i[k], 3.2, 2.6);
+    });
+    // Từ cáp ngầm leo lên cột tới bóng đèn
+    this.P.posts.forEach((p, n) => {
+      const x = 1.9 + n * 1.45, z = 0.85 + p.ph * 0.08;
+      add(curveOf([[x, 0.03, z], [x + 0.05, 0.04, 1.3], [x + 0.05, 0.4, 1.33], [x + 0.05, 2.85, 1.33], [x, 2.99, 1.55], [x, 2.95, 1.76]]),
+        false, PH[p.ph], ctx => ctx.postI[n], 2.2, 3.5);
+    });
+    const mk = (inCab, size) => {
+      const list = this.flows.filter(f => f.inCab === inCab); let off = 0;
+      list.forEach(f => { f.off = off; off += f.n; });
+      const geo = new T.BufferGeometry();
+      geo.setAttribute('position', new T.BufferAttribute(new Float32Array(off * 3), 3));
+      geo.setAttribute('color', new T.BufferAttribute(new Float32Array(off * 3), 3));
+      const pts = new T.Points(geo, new T.PointsMaterial({size, map: this.glowTex(), vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending}));
+      pts.frustumCulled = false; pts.renderOrder = 5;
+      (inCab ? this.cabG : this.scene).add(pts);
+      list.forEach(f => { f.geo = geo; });
+      return pts;
+    };
+    mk(true, 0.032); mk(false, 0.1);
+    // Tia lửa tại điểm nghi cắt cáp
+    const NS = 48, sg = new T.BufferGeometry();
+    sg.setAttribute('position', new T.BufferAttribute(new Float32Array(NS * 3), 3));
+    sg.setAttribute('color', new T.BufferAttribute(new Float32Array(NS * 3), 3));
+    const sp = new T.Points(sg, new T.PointsMaterial({size: 0.07, map: this.glowTex(), vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending}));
+    sp.frustumCulled = false; this.scene.add(sp);
+    this.sparks = {geo: sg, p: Array.from({length: NS}, () => ({x: 0, y: -9, z: 0, vx: 0, vy: 0, vz: 0, life: 0}))};
+    // Nhãn số ampe trên cáp ra
+    this.P.ampTags = [0, 1, 2].map(k => {
+      const t = this.canvasTex(320, 80, (g, W, H, txt) => {
+        g.clearRect(0, 0, W, H); g.fillStyle = 'rgba(12,18,28,.82)';
+        g.beginPath(); if (g.roundRect) g.roundRect(2, 2, W - 4, H - 4, 22); else g.rect(2, 2, W - 4, H - 4); g.fill();
+        g.fillStyle = PH[k]; g.beginPath(); g.arc(38, H / 2, 14, 0, 7); g.fill();
+        g.fillStyle = '#fff'; g.font = '700 38px system-ui'; g.textBaseline = 'middle'; g.fillText(txt || `Pha ${'ABC'[k]}`, 64, H / 2 + 2);
+      });
+      const s = new T.Sprite(new T.SpriteMaterial({map: t.tex, depthTest: false, transparent: true, sizeAttenuation: false}));
+      s.scale.set(0.1, 0.025, 1); s.renderOrder = 9;
+      s.position.set(1.3 + k * 0.75, 0.3, 0.85 + k * 0.08); this.scene.add(s);
+      return {s, t};
+    });
+  },
+  updateFlow(ctx, dt) {
+    const tmp = this._tmpV || (this._tmpV = new THREE.Vector3()), geos = new Set();
+    for (const f of this.flows) {
+      const I = Math.max(0, f.getI(ctx) || 0);
+      const nVis = this.showFlow && I > CFG.I_ZERO ? Math.max(3, Math.round(f.n * Math.min(1, 0.25 + I / 4))) : 0;
+      f.ph = (f.ph + dt * (0.1 + Math.min(I, 10) * 0.07) * f.speed / f.len) % 1;
+      const pos = f.geo.attributes.position.array, col = f.geo.attributes.color.array;
+      for (let j = 0; j < f.n; j++) {
+        const o = (f.off + j) * 3;
+        if (j < nVis) {
+          f.curve.getPointAt((f.ph + j / nVis) % 1, tmp);
+          pos[o] = tmp.x; pos[o + 1] = tmp.y; pos[o + 2] = tmp.z;
+          const b = 0.75 + 0.25 * Math.sin((f.ph + j / nVis) * 40);
+          col[o] = f.col.r * b; col[o + 1] = f.col.g * b; col[o + 2] = f.col.b * b;
+        } else { col[o] = col[o + 1] = col[o + 2] = 0; pos[o + 1] = -50; }
+      }
+      geos.add(f.geo);
+    }
+    geos.forEach(g => { g.attributes.position.needsUpdate = true; g.attributes.color.needsUpdate = true; });
+    // Tia lửa
+    const S = this.sparks, sp = S.geo.attributes.position.array, sc = S.geo.attributes.color.array;
+    const cuts = [0, 1, 2].filter(k => ctx.cut[k] && ctx.vOk[k]);
+    S.p.forEach((p, n) => {
+      p.life -= dt;
+      if (p.life <= 0 && cuts.length && this.showFlow && Math.random() < 0.35) {
+        const k = cuts[n % cuts.length];
+        Object.assign(p, {x: 3.3 - 0.06, y: 0.05, z: 0.85 + k * 0.08, vx: rnd(-0.6, 0.8), vy: rnd(0.6, 1.6), vz: rnd(-0.6, 0.6), life: rnd(0.25, 0.6)});
+      }
+      if (p.life > 0) { p.vy -= 4 * dt; p.x += p.vx * dt; p.y = Math.max(0.02, p.y + p.vy * dt); p.z += p.vz * dt; }
+      sp[n * 3] = p.x; sp[n * 3 + 1] = p.life > 0 ? p.y : -50; sp[n * 3 + 2] = p.z;
+      const b = Math.max(0, p.life) * 2;
+      sc[n * 3] = b; sc[n * 3 + 1] = 0.7 * b; sc[n * 3 + 2] = 0.2 * b;
+    });
+    S.geo.attributes.position.needsUpdate = true; S.geo.attributes.color.needsUpdate = true;
   },
 
   /* ---------- Camera ---------- */
@@ -1766,7 +1885,7 @@ const V3 = {
 
   /* ---------- Vòng vẽ ---------- */
   frame(ts) {
-    if (!this.renderer || !document.body.contains(this.renderer.domElement)) { this.running = false; return; }
+    if (!this.renderer || !document.body.contains(this.renderer.domElement)) { this.running = false; this._lt = 0; return; }
     const time = ts / 1000, c = this.cam;
     if (this.goal) {
       let done = true;
@@ -1810,6 +1929,7 @@ const V3 = {
     if (t !== this.lastTele) {
       this.lastTele = t; this.st = segStatus(cab);
       this.P.meterScr.forEach((s, k) => s.draw(t.v ? [`${num(v[k], 1)} V`, `${num(i[k], 2)} A`] : ['---.- V', '-.-- A']));
+      if (this.P.ampTags) this.P.ampTags.forEach((a, k) => a.t.draw(`Pha ${'ABC'[k]}: ${num(i[k], 2)} A`));
     }
     this.P.led.material.color.set(cab.online ? '#2ecc71' : '#d63a3a');
     this.P.led.material.emissive.set(cab.online ? '#2ecc71' : '#d63a3a');
@@ -1827,6 +1947,18 @@ const V3 = {
     });
     // Cột đèn và cây trang trí
     const closed = c => FB_OF_DO[c] >= 0 ? di[FB_OF_DO[c]] === 1 : d[c] === 1;
+    // Dòng điện chạy trong dây
+    const iA = [0, 1, 2].map(k => i[k] || 0), tot = iA.reduce((a, b) => a + b, 0);
+    const wsum = SIM_SHARE.reduce((s, w, c) => s + (closed(c) ? w : 0), 0);
+    const perPhasePosts = [0, 1, 2].map(k => this.P.posts.filter(p => p.ph === k && closed(p.ch)).length || 1);
+    const ctx = {
+      i: iA, vOk: [0, 1, 2].map(k => (v[k] || 0) >= CFG.V_LOST),
+      cut: [0, 1, 2].map(k => !!cab.active['CAT_CAP' + 'ABC'[k]]),
+      kI: [0, 1, 2, 3].map(c => closed(c) && wsum > 0 ? tot * SIM_SHARE[c] / wsum : 0),
+      postI: this.P.posts.map(p => closed(p.ch) && iA[p.ph] > CFG.I_ZERO ? iA[p.ph] / perPhasePosts[p.ph] : 0)
+    };
+    const dt = Math.min(0.1, time - (this._lt || time)); this._lt = time;
+    if (this.flows) this.updateFlow(ctx, dt);
     this.P.posts.forEach(p => {
       const lit = closed(p.ch) && i[p.ph] > CFG.I_ZERO;
       p.head.material.emissive.set(lit ? '#ffe9a0' : '#000'); p.head.material.emissiveIntensity = lit ? 1 : 0;
@@ -1838,6 +1970,9 @@ const V3 = {
     const goalA = di[DI.DOOR] ? -1.75 : 0;
     this.doorAngle += (goalA - this.doorAngle) * 0.08; this.door.rotation.y = this.doorAngle;
     const dm = this.P.doorPanel.material; dm.opacity = this.seeThrough && Math.abs(this.doorAngle) < 0.3 ? 0.16 : 1; dm.depthWrite = dm.opacity > 0.5;
+    // Đang nhìn xuyên: ẩn biển tên, đèn báo, công tắc trên cửa để không che thiết bị bên trong
+    const decor = dm.opacity > 0.5 || this.sel === 'door' || this.sel === 'selector';
+    this.P.doorDecor.forEach(o => { o.visible = decor; });
     this.P.selector.rotation.z = di[DI.AUTO] === 0 ? 0.8 : -0.8;
     // Vỏ tủ nghiêng / rung khi va chạm
     const tilt = cab.active.NGHIENG ? Math.min(30, t.tilt || 20) : 0;
@@ -1905,7 +2040,9 @@ function tab3D(cab) {
       <div class="v3tools">
         <button class="btn sm" data-act="v3-home" title="Toàn cảnh">🎯 Toàn cảnh</button>
         <button class="btn sm" data-act="v3-see" title="Nhìn xuyên cửa tủ">${V3.seeThrough ? '🚪 Hiện cửa' : '👁️ Nhìn xuyên'}</button>
+        <button class="btn sm" data-act="v3-flow" title="Hiện dòng điện chạy trong dây">${V3.showFlow === false ? '⚡ Hiện dòng điện' : '⚡ Ẩn dòng điện'}</button>
       </div>
+      <div class="v3legend"><span><i style="background:var(--pa)"></i>A</span><span><i style="background:var(--pb)"></i>B</span><span><i style="background:var(--pc)"></i>C</span><span><i style="background:#ffe08a"></i>ra kênh</span><em>Hạt chạy nhanh, dày = dòng lớn</em></div>
       <div class="v3info" id="v3info" hidden></div>
       <div class="v3hint">Kéo để xoay · chụm 2 ngón hoặc lăn chuột để phóng to · chạm vào bộ phận để xem</div>
     </div>
