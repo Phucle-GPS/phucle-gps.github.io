@@ -158,6 +158,13 @@ canvas{width:100%;height:170px;display:block;background:var(--soft);border-radiu
 .sticky-bar{position:sticky;bottom:calc(64px + env(safe-area-inset-bottom));background:var(--card);border-radius:14px;box-shadow:0 -2px 14px rgba(0,0,0,.12);padding:10px 12px;margin-top:10px}
 @media (min-width:900px){.sticky-bar{bottom:12px}}
 pre.report{white-space:pre-wrap;background:var(--soft);padding:10px;border-radius:10px;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace}
+.v3wrap{padding:0;overflow:hidden;position:relative}
+#v3d{height:min(62vh,560px);background:var(--soft)}
+.v3tools{position:absolute;top:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.v3hint{position:absolute;left:10px;bottom:10px;font-size:11.5px;color:#fff;background:rgba(0,0,0,.5);padding:3px 8px;border-radius:8px;max-width:calc(100% - 20px);pointer-events:none}
+.v3info:not([hidden])~.v3hint,.v3hint:has(~.v3info:not([hidden])){display:none}
+.v3info{position:absolute;left:10px;right:10px;bottom:10px;background:var(--card);border-radius:12px;padding:10px 12px;box-shadow:0 4px 18px rgba(0,0,0,.25);max-height:48%;overflow:auto}
+@media (min-width:900px){.v3info{right:auto;width:400px}}
 @media (max-width:420px){.two{grid-template-columns:1fr}}
 </style>
 </head>
@@ -808,15 +815,20 @@ function viewCabList() {
 }
 
 /* ---------- Chi tiết tủ ---------- */
-const TABS = [['do-luong', 'Đo lường'], ['vao-ra', 'Vào / Ra'], ['dien-nang', 'Điện năng'], ['lich', 'Lịch'], ['nhat-ky', 'Nhật ký']];
+const TABS = [['do-luong', 'Đo lường'], ['3d', 'Sơ đồ 3D'], ['vao-ra', 'Vào / Ra'], ['dien-nang', 'Điện năng'], ['lich', 'Lịch'], ['nhat-ky', 'Nhật ký']];
 function viewCab(key, tab) {
   const cab = App.cabs[key];
   if (!cab) return '<div class="empty">Không tìm thấy tủ. <a href="#/tu">Về danh sách</a></div>';
-  const t = cab.tele || {}, s = App.cabState(cab), mi = modeInfo(t);
-  const ago = Math.round((Date.now() - cab.lastSeen) / 1000);
-  const body = {'do-luong': tabMeasure, 'vao-ra': tabIO, 'dien-nang': tabEnergy, 'lich': tabSched, 'nhat-ky': tabLog}[tab](cab);
+  const body = {'do-luong': tabMeasure, '3d': tab3D, 'vao-ra': tabIO, 'dien-nang': tabEnergy, 'lich': tabSched, 'nhat-ky': tabLog}[tab](cab);
   return `<a class="back" href="#/tu">‹ Danh sách tủ</a>
-    <div class="panel"><div class="row"><div class="grow"><h1 style="margin:0">${esc(cab.cfg.id)} · ${esc(cab.cfg.name)}</h1>
+    <div class="panel" id="cabHead">${cabHeadHtml(cab)}</div>
+    <div class="tabs">${TABS.map(([k, n]) => `<a href="#/tu/${encodeURIComponent(key)}/${k}" class="${k === tab ? 'on' : ''}">${n}</a>`).join('')}</div>
+    ${body}`;
+}
+function cabHeadHtml(cab) {
+  const key = cab.cfg.key, t = cab.tele || {}, s = App.cabState(cab), mi = modeInfo(t);
+  const ago = Math.round((Date.now() - cab.lastSeen) / 1000);
+  return `<div class="row"><div class="grow"><h1 style="margin:0">${esc(cab.cfg.id)} · ${esc(cab.cfg.name)}</h1>
       <div class="sub">${esc(cab.cfg.area)} · ${esc(cab.cfg.team)} · ${cab.online ? (!cab.tele ? 'chưa có dữ liệu' : ago < 6 ? 'vừa cập nhật' : `cập nhật ${ago} giây trước`) : '<b style="color:var(--bad)">mất kết nối</b>'}</div></div></div>
       <div class="row" style="margin-top:6px">${statusPill(s)}<span class="pill ${mi.cls}">${mi.txt}</span></div>
       ${lampsHtml(cab, true)}
@@ -825,9 +837,7 @@ function viewCab(key, tab) {
         <button class="btn sm" data-act="mode-auto" data-key="${esc(key)}" ${t.mode === 'remote' ? '' : 'disabled'}>🕒 Về tự động</button>
         <button class="btn sm" data-act="maint" data-key="${esc(key)}" data-val="${t.maint ? 0 : 1}">🔧 ${t.maint ? 'Kết thúc bảo trì' : 'Bật bảo trì'}</button>
         <button class="btn sm" data-act="status" data-key="${esc(key)}">🔄 Đọc lại</button>
-      </div></div>
-    <div class="tabs">${TABS.map(([k, n]) => `<a href="#/tu/${encodeURIComponent(key)}/${k}" class="${k === tab ? 'on' : ''}">${n}</a>`).join('')}</div>
-    ${body}`;
+      </div>`;
 }
 function legend() { return `<div class="legend">${[0, 1, 2].map(k => `<span><i style="background:${PHC[k]}"></i>Pha ${'ABC'[k]}</span>`).join('')}</div>`; }
 function tabMeasure(cab) {
@@ -971,7 +981,8 @@ function viewAlerts() {
         <div class="act">👉 ${esc(info.act)}</div>
         ${x.note ? `<div class="sub" style="margin-top:6px">📝 ${esc(x.note)}</div>` : ''}
         <div class="btns"><select class="in" data-act="inc-team" data-no="${x.no}" aria-label="Tổ phụ trách">${teams.map(t => `<option${t === x.team ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>${btns}
-          <button class="btn sm" data-act="inc" data-op="zalo" data-no="${x.no}">📤 Zalo</button></div>
+          <button class="btn sm" data-act="inc" data-op="zalo" data-no="${x.no}">📤 Zalo</button>
+          <a class="btn sm" href="#/tu/${encodeURIComponent(x.cab)}/3d/${segOf(x.code, x.phases[0] || '-')}">🧊 3D</a></div>
         <details class="log" data-no="${x.no}"${openLogs.has(x.no) ? ' open' : ''}><summary>Nhật ký (${x.log.length})</summary>${x.log.map(l => `<div>${fmtTime(l.t)} – ${esc(l.s)}</div>`).join('')}</details>
       </div>`;
     }).join('') || '<div class="empty">Không có sự cố ở mục này.</div>'}</div>`;
@@ -1147,7 +1158,7 @@ function barChart(id, labels, values) {
 function route() {
   const p = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (!p[0]) return {r: 'home', live: true};
-  if (p[0] === 'tu' && p[1]) { const tab = TABS.some(t => t[0] === p[2]) ? p[2] : 'do-luong'; return {r: 'tu', key: p[1], tab, live: tab !== 'lich'}; }
+  if (p[0] === 'tu' && p[1]) { const tab = TABS.some(t => t[0] === p[2]) ? p[2] : 'do-luong'; return {r: 'tu', key: p[1], tab, seg: p[3], live: tab !== 'lich' && tab !== '3d'}; }
   if (p[0] === 'tu') return {r: 'tu', live: true};
   if (p[0] === 'dieu-khien') return {r: 'dieu-khien', live: true};
   if (p[0] === 'canh-bao') return {r: 'canh-bao', live: false};
@@ -1178,6 +1189,7 @@ function render(force) {
       lineChart('chI', [0, 1, 2].map(k => fill(cab.hist.map(h => h.i[k]))), colors, 0);
       lineChart('chV', [0, 1, 2].map(k => fill(cab.hist.map(h => h.v[k]))), colors);
     }
+    if (R.tab === '3d') V3.mount(cab, changed ? R.seg : null);
     if (R.tab === 'dien-nang') {
       const st = energyStats(R.key, App.nowFor(cab));
       barChart('chE', st.days.map(d => d.k.slice(8) + '/' + d.k.slice(5, 7)), st.days.map(d => d.v));
@@ -1230,6 +1242,16 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'mq': mqToggle(); break;
+    case 'v3-focus': V3.select(el.dataset.seg); document.getElementById('v3d')?.scrollIntoView({behavior: 'smooth', block: 'center'}); break;
+    case 'v3-home': V3.sel = null; V3.home(); V3.tick(); break;
+    case 'v3-close': V3.sel = null; V3.tick(); break;
+    case 'v3-see': V3.seeThrough = !V3.seeThrough; el.textContent = V3.seeThrough ? '🚪 Hiện cửa' : '👁️ Nhìn xuyên'; break;
+    case 'v3-report': {
+      const r = segReport(App.cabs[V3.key]);
+      openModal(`<h2>Báo cáo phân đoạn</h2><pre class="report">${esc(r)}</pre><div class="btns"><button class="btn" id="mNo">Đóng</button><button class="btn pri" id="mYes">📤 Chép báo cáo</button></div>`);
+      $('#mNo').onclick = closeModal; $('#mYes').onclick = () => copyText(r, 'Đã chép báo cáo phân đoạn');
+      break;
+    }
     case 'pin-set': {
       const v = $('#pinNew').value.trim();
       if (!/^\d{4,8}$/.test(v)) { toast('PIN gồm 4–8 chữ số'); break; }
@@ -1351,8 +1373,543 @@ function loop() {
   });
   if (App.energyDirty && ++energySaveTick >= 30) { energySaveTick = 0; App.energyDirty = false; App.saveEnergy(); }
   updateHeader();
+  if (route().tab === '3d') V3.tick();
   render(false);
   Bus.flush();
+}
+
+/* =====================================================================
+   12. SƠ ĐỒ TỦ 3D + PHÂN ĐOẠN SỰ CỐ
+   Mỗi bộ phận trong tủ là một "phân đoạn". Cảnh báo được gắn vào phân đoạn
+   tương ứng: bộ phận nhấp nháy đỏ + nhãn nổi, bảng phân đoạn bên dưới.
+   ===================================================================== */
+const SEGS = [
+  {id: 'nguon', icon: '⚡', name: 'Nguồn vào & điện lưới'},
+  {id: 'cb', icon: '🔻', name: 'CB tổng'},
+  {id: 'spd', icon: '🌩️', name: 'Chống sét (SPD)'},
+  {id: 'meter', icon: '📟', name: 'Đo đếm (đồng hồ + CT)'},
+  {id: 'k1', icon: '🧲', name: 'Contactor K1'}, {id: 'k2', icon: '🧲', name: 'Contactor K2'},
+  {id: 'k3', icon: '🧲', name: 'Contactor K3'}, {id: 'k4', icon: '🧲', name: 'Contactor K4'},
+  {id: 'gateway', icon: '📡', name: 'Gateway & kết nối 4G'},
+  {id: 'selector', icon: '✋', name: 'Công tắc Tay/Tự động'},
+  {id: 'door', icon: '🚪', name: 'Cửa tủ'},
+  {id: 'vo', icon: '💥', name: 'Vỏ tủ & móng'},
+  {id: 'capA', icon: '✂️', name: 'Tuyến cáp pha A'}, {id: 'capB', icon: '✂️', name: 'Tuyến cáp pha B'}, {id: 'capC', icon: '✂️', name: 'Tuyến cáp pha C'},
+  {id: 'den', icon: '💡', name: 'Tuyến đèn'}
+];
+function segOf(code, ph) {
+  switch (code) {
+    case 'CAT_CAP': return 'cap' + ph;
+    case 'MAT_PHA': case 'MAT_DIEN': case 'DIEN_AP': return 'nguon';
+    case 'CB_TONG': return 'cb';
+    case 'SPD': return 'spd';
+    case 'LOI_DONG_HO': return 'meter';
+    case 'K_KHONG_DONG': case 'K_KHONG_CAT': return 'k' + ph;
+    case 'KHONG_SANG': case 'SANG_NGAY': return 'den';
+    case 'MO_CUA': return 'door';
+    case 'VA_CHAM': case 'NGHIENG': return 'vo';
+    case 'CHE_DO_TAY': return 'selector';
+    case 'MAT_KET_NOI': return 'gateway';
+    default: return null;
+  }
+}
+function segName(cab, id) {
+  if (/^k[1-4]$/.test(id)) return 'Contactor ' + cab.cfg.doNames[+id[1] - 1];
+  return SEGS.find(s => s.id === id)?.name || id;
+}
+// Trạng thái từng phân đoạn: cảnh báo đang hoạt động + sự cố chưa xong
+function segStatus(cab) {
+  const out = {};
+  SEGS.forEach(s => { out[s.id] = {live: [], inc: [], sev: 0}; });
+  Object.values(cab.active).forEach(a => {
+    const id = segOf(a.code, a.phase); if (!id || !out[id]) return;
+    out[id].live.push(a); out[id].sev = Math.max(out[id].sev, ALARM[a.code]?.sev || 1);
+  });
+  App.incidents.filter(x => x.cab === cab.cfg.key && x.status !== 'done').forEach(x => {
+    const ids = x.phases.length ? x.phases.map(p => segOf(x.code, p)) : [segOf(x.code, '-')];
+    [...new Set(ids)].forEach(id => {
+      if (!id || !out[id]) return;
+      out[id].inc.push(x); out[id].sev = Math.max(out[id].sev, ALARM[x.code]?.sev || 1);
+    });
+  });
+  return out;
+}
+function segDetail(cab, id) {
+  const t = cab.tele || {}, v = t.v || [], i = t.i || [], di = t.di || [], d = t.do || [], sch = t.sch || DEF_SCHED;
+  const P = 'ABC';
+  if (id === 'nguon') return `Điện áp: ${[0, 1, 2].map(k => `${P[k]} ${num(v[k], 0)} V`).join(' · ')} · tần số ${num(t.f, 2)} Hz`;
+  if (id === 'cb') return `CB tổng: <b>${di[DI.CB] === undefined ? '—' : di[DI.CB] ? 'Đóng' : 'Cắt / nhảy'}</b>`;
+  if (id === 'spd') return `Chống sét: <b>${di[DI.SPD] === undefined ? '—' : di[DI.SPD] ? 'Tốt' : 'Hỏng'}</b>`;
+  if (id === 'meter') return [0, 1, 2].map(k => `${P[k]}: ${num(v[k], 0)} V · ${num(i[k], 2)} A · ${num((t.p || [])[k], 0)} W`).join('<br>') + `<br>Chỉ số: ${num(t.kwh, 1)} kWh`;
+  if (/^k[1-4]$/.test(id)) {
+    const c = +id[1] - 1, fb = FB_OF_DO[c] >= 0 ? di[FB_OF_DO[c]] : undefined, s = sch[c] || [0, 0, 0];
+    return `Lệnh: <b>${d[c] ? 'Đóng' : 'Cắt'}</b>${fb !== undefined ? ` · Phản hồi: <b>${fb ? 'Đóng' : 'Mở'}</b>${fb !== d[c] ? ' <b style="color:var(--bad)">⚠ lệch</b>' : ''}` : ''} · Lịch ${s[0] ? hm(s[1]) + '→' + hm(s[2]) : 'tắt'}`;
+  }
+  if (id === 'gateway') return `${cab.online ? '🟢 Đang kết nối' : '🔴 Mất kết nối'} · sóng ${num(t.rssi, 0)} dBm · hàng đợi ${t.q ?? '—'} · thẻ SD ${t.sd ? 'OK' : '—'}`;
+  if (id === 'selector') return `Công tắc tại tủ: <b>${di[DI.AUTO] === undefined ? '—' : di[DI.AUTO] ? 'Tự động' : 'Tay'}</b>`;
+  if (id === 'door') return `Cửa: <b>${di[DI.DOOR] ? 'Mở' : 'Đóng'}</b> · Bảo trì: ${t.maint ? 'bật' : 'tắt'}`;
+  if (id === 'vo') return `Độ nghiêng: <b>${num(t.tilt, 1)}°</b> (báo khi > ${CFG.TILT_ALARM}°)`;
+  if (/^cap[ABC]$/.test(id)) { const k = P.indexOf(id[3]); return `Pha ${id[3]}: ${num(i[k], 2)} A · ${num(v[k], 0)} V`; }
+  if (id === 'den') return `Kênh đang sáng: ${cab.cfg.doNames.filter((n, c) => d[c]).map(n => n.split('·')[0].trim()).join(', ') || 'không'} · tổng dòng ${num(i.reduce((a, b) => a + (b || 0), 0), 1)} A`;
+  return '';
+}
+function incLine(x) {
+  const info = ALARM[x.code];
+  return `${esc(x.no)} · ${info.icon} ${esc(info.label)}${x.phases.length ? ' ' + x.phases.map(p => phaseLabel(x.code, p)).join(',') : ''} · ${STATUS[x.status]} · ${esc(x.team)} · ${fmtTime(x.at)}${x.cleared ? ' · thiết bị báo đã hết' : ''}`;
+}
+function segReport(cab) {
+  const st = segStatus(cab), bad = SEGS.filter(s => st[s.id].sev > 0);
+  let r = `BÁO CÁO PHÂN ĐOẠN – ${cab.cfg.id} ${cab.cfg.name} (${cab.cfg.area})\nLúc: ${fmtTime(App.nowFor(cab))}\n`;
+  r += `Có sự cố: ${bad.length}/${SEGS.length} phân đoạn\n\n`;
+  SEGS.forEach(s => {
+    const x = st[s.id];
+    if (!x.sev) { r += `✅ ${segName(cab, s.id)}: bình thường\n`; return; }
+    r += `⚠️ ${segName(cab, s.id)}:\n`;
+    x.inc.forEach(i => { r += `   - ${incLine(i).replace(/<[^>]+>/g, '')}\n`; });
+    x.live.filter(a => !x.inc.some(i => i.code === a.code)).forEach(a => { r += `   - ${ALARM[a.code].label} (đang báo)\n`; });
+  });
+  return r;
+}
+
+const V3 = {
+  renderer: null, scene: null, camera: null, key: null, running: false, sel: null, seeThrough: true,
+  cam: {theta: 0.62, phi: 1.13, r: 6.4, tx: 1.7, ty: 1.0, tz: 0.5}, goal: null,
+  seg: {}, anchors: {}, markers: {}, P: {}, lastTele: null, pts: new Map(), down: null,
+
+  async load() {
+    if (window.THREE) return true;
+    try { await loadScript('vendor/three.min.js'); } catch (e) { /* thử CDN */ }
+    if (!window.THREE) { try { await loadScript('https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js'); } catch (e) { /* bỏ qua */ } }
+    return !!window.THREE;
+  },
+  async mount(cab, focus) {
+    if (!document.getElementById('v3d')) return;
+    if (!await this.load()) { const b = document.getElementById('v3d'); if (b) b.innerHTML = '<div class="empty">Không tải được thư viện 3D – kiểm tra kết nối mạng.</div>'; return; }
+    const box = document.getElementById('v3d'); if (!box) return;
+    if (!this.renderer) this.init();
+    if (this.key !== cab.cfg.key) this.build(cab);
+    box.innerHTML = ''; box.appendChild(this.renderer.domElement);
+    this.resize();
+    if (this.needHome) { this.needHome = false; this.home(true); }
+    if (focus) this.select(focus);
+    if (!this.running) { this.running = true; requestAnimationFrame(t => this.frame(t)); }
+    this.tick();
+  },
+  init() {
+    const T = THREE;
+    this.renderer = new T.WebGLRenderer({antialias: true});
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.outputEncoding = T.sRGBEncoding;
+    this.camera = new T.PerspectiveCamera(42, 1, 0.05, 120);
+    this.ray = new T.Raycaster();
+    const el = this.renderer.domElement;
+    el.style.touchAction = 'none'; el.style.display = 'block'; el.style.width = '100%'; el.style.height = '100%';
+    el.setAttribute('aria-label', 'Mô hình 3D tủ điện – kéo để xoay, chụm hai ngón để phóng to');
+    el.addEventListener('pointerdown', e => {
+      el.setPointerCapture(e.pointerId); this.pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
+      this.down = {x: e.clientX, y: e.clientY, t: Date.now()}; this.goal = null;
+    });
+    el.addEventListener('pointermove', e => {
+      const p = this.pts.get(e.pointerId); if (!p) return;
+      if (this.pts.size === 1) {
+        this.cam.theta -= (e.clientX - p.x) * 0.008;
+        this.cam.phi = Math.min(1.5, Math.max(0.3, this.cam.phi - (e.clientY - p.y) * 0.006));
+      } else if (this.pts.size === 2) {
+        const [a, b] = [...this.pts.values()], d0 = Math.hypot(a.x - b.x, a.y - b.y);
+        p.x = e.clientX; p.y = e.clientY;
+        const [c, d] = [...this.pts.values()], d1 = Math.hypot(c.x - d.x, c.y - d.y);
+        if (d0 > 0 && d1 > 0) this.cam.r = Math.min(16, Math.max(0.7, this.cam.r * d0 / d1));
+      }
+      p.x = e.clientX; p.y = e.clientY;
+    });
+    const up = e => {
+      this.pts.delete(e.pointerId);
+      if (this.down && e.type === 'pointerup' && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) < 7 && Date.now() - this.down.t < 450) this.pick(e);
+      this.down = null;
+    };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    el.addEventListener('wheel', e => { e.preventDefault(); this.goal = null; this.cam.r = Math.min(16, Math.max(0.7, this.cam.r * (e.deltaY > 0 ? 1.1 : 0.9))); }, {passive: false});
+  },
+  resize() {
+    const el = this.renderer.domElement.parentElement; if (!el) return;
+    const w = el.clientWidth, h = el.clientHeight;
+    this.renderer.setSize(w, h, false); this.camera.aspect = w / Math.max(1, h); this.camera.updateProjectionMatrix();
+  },
+
+  /* ---------- Dựng cảnh ---------- */
+  mat(color, o) { return new THREE.MeshStandardMaterial(Object.assign({color, roughness: 0.65, metalness: 0.1}, o || {})); },
+  add(geo, color, x, y, z, parent, seg, o) {
+    const m = new THREE.Mesh(geo, this.mat(color, o));
+    m.position.set(x, y, z); parent.add(m);
+    if (seg) { m.userData.seg = seg; (this.seg[seg] = this.seg[seg] || []).push(m); m.material.userData.base = m.material.emissive.getHex(); }
+    return m;
+  },
+  box(w, h, d, color, x, y, z, parent, seg, o) { return this.add(new THREE.BoxGeometry(w, h, d), color, x, y, z, parent, seg, o); },
+  tube(points, r, color, parent, seg, o) {
+    const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p)), false, 'catmullrom', 0.1);
+    const m = this.add(new THREE.TubeGeometry(curve, Math.max(24, points.length * 12), r, 8, false), color, 0, 0, 0, parent, seg, o);
+    m.userData.hl = false;     // dây: trạng thái thể hiện bằng màu riêng, không nhấp nháy chung
+    return m;
+  },
+  canvasTex(w, h, draw) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding; tex.anisotropy = 4;
+    const api = {c, tex, draw(...a) { draw(c.getContext('2d'), w, h, ...a); tex.needsUpdate = true; }};
+    api.draw(); return api;
+  },
+  label(text, w, h, parent, x, y, z, o = {}) {
+    const t = this.canvasTex(512, Math.round(512 * h / w), (g, W, H) => {
+      g.clearRect(0, 0, W, H);
+      if (o.bg) { g.fillStyle = o.bg; g.fillRect(0, 0, W, H); }
+      g.fillStyle = o.fg || '#17212b'; g.font = `700 ${Math.round(H * (o.size || 0.55))}px system-ui, sans-serif`;
+      g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, W / 2, H / 2 + 2);
+    });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({map: t.tex, transparent: true}));
+    m.position.set(x, y, z); parent.add(m); return m;
+  },
+  sprite(text, color, scale) {
+    const t = this.canvasTex(512, 128, (g, W, H) => {
+      g.clearRect(0, 0, W, H);
+      g.fillStyle = color; g.beginPath();
+      if (g.roundRect) g.roundRect(4, 14, W - 8, H - 28, 40); else g.rect(4, 14, W - 8, H - 28);
+      g.fill();
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(64, H / 2, 32, 0, 7); g.fill();
+      g.fillStyle = color; g.font = '900 48px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('!', 64, H / 2 + 3);
+      g.fillStyle = '#fff'; g.font = '700 40px system-ui'; g.textAlign = 'left'; g.fillText(text.slice(0, 18), 112, H / 2 + 2);
+    });
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({map: t.tex, depthTest: false, transparent: true, sizeAttenuation: false}));
+    s.scale.set(scale * 4, scale, 1); s.renderOrder = 10; return s;
+  },
+  build(cab) {
+    const T = THREE, PH = [cssVar('--pa') || '#d6451f', cssVar('--pb') || '#c99700', cssVar('--pc') || '#2b6fd6'];
+    this.key = cab.cfg.key; this.seg = {}; this.anchors = {}; this.markers = {}; this.P = {}; this.lastTele = null; this.sel = null;
+    const S = this.scene = new T.Scene();
+    this.hemi = new T.HemisphereLight(0xffffff, 0x445544, 0.9); S.add(this.hemi);
+    this.sun = new T.DirectionalLight(0xffffff, 0.8); this.sun.position.set(4, 8, 6); S.add(this.sun);
+    this.add(new T.PlaneGeometry(40, 40), '#8fa58b', 3, 0, 0, S).rotation.x = -Math.PI / 2;
+    const road = this.add(new T.PlaneGeometry(13, 1.5), '#4a4f57', 4.5, 0.004, 2.25, S); road.rotation.x = -Math.PI / 2;
+    for (let x = -1.5; x < 11; x += 1) { const l = this.add(new T.PlaneGeometry(0.5, 0.06), '#e9e9e9', x, 0.006, 2.25, S); l.rotation.x = -Math.PI / 2; }
+    const pave = this.add(new T.PlaneGeometry(13, 0.9), '#b9b4aa', 4.5, 0.003, 1.15, S); pave.rotation.x = -Math.PI / 2;
+
+    // ---- Lưới điện ----
+    this.box(0.06, 3.2, 0.06, '#8d8d8d', -2.6, 1.6, 0.1, S, 'nguon');
+    this.box(0.45, 0.55, 0.32, '#5d7a62', -2.6, 2.4, 0.32, S, 'nguon');
+    this.label('ĐIỆN LỰC', 0.42, 0.12, S, -2.6, 2.4, 0.485, {fg: '#fff'});
+    this.anchors.nguon = new T.Vector3(-2.6, 2.95, 0.3);
+
+    // ---- Tủ (nhóm riêng để nghiêng / rung) ----
+    const G = this.cabG = new T.Group(); S.add(G);
+    this.box(1.32, 0.2, 0.56, '#9a9a96', 0, 0.1, 0, G, 'vo');
+    const body = '#c3c9d1';
+    this.box(1.2, 1.6, 0.02, body, 0, 1.0, -0.215, G, 'vo');
+    this.box(0.02, 1.6, 0.45, body, -0.59, 1.0, 0, G, 'vo');
+    this.box(0.02, 1.6, 0.45, body, 0.59, 1.0, 0, G, 'vo');
+    this.box(1.28, 0.035, 0.52, body, 0, 1.815, 0.01, G, 'vo');
+    this.box(1.2, 0.02, 0.45, body, 0, 0.21, 0, G, 'vo');
+    this.box(1.08, 1.48, 0.012, '#e3e6ea', 0, 1.0, -0.2, G);
+    this.anchors.vo = new T.Vector3(0.75, 1.95, 0.3);
+
+    // Hàng trên: CB tổng, chống sét, nguồn, router 4G
+    this.box(0.24, 0.26, 0.13, '#2f3540', -0.33, 1.6, -0.13, G, 'cb');
+    this.P.lever = this.box(0.045, 0.075, 0.035, '#e8eaed', -0.33, 1.6, -0.05, G, 'cb');
+    this.label('CB TỔNG', 0.2, 0.05, G, -0.33, 1.76, -0.06, {fg: '#17212b'});
+    this.box(0.15, 0.2, 0.1, '#f1f1f1', -0.08, 1.6, -0.145, G, 'spd');
+    this.P.spdWin = this.box(0.06, 0.04, 0.01, '#1f9d55', -0.08, 1.63, -0.09, G);
+    this.label('SPD', 0.12, 0.04, G, -0.08, 1.55, -0.094, {fg: '#17212b'});
+    this.box(0.14, 0.18, 0.1, '#bfc5cc', 0.15, 1.6, -0.145, G, 'gateway');
+    this.label('NGUỒN', 0.12, 0.04, G, 0.15, 1.6, -0.094, {fg: '#17212b'});
+    this.box(0.18, 0.05, 0.12, '#f7f7f7', 0.39, 1.6, -0.13, G, 'gateway');
+    this.box(0.008, 0.2, 0.008, '#222', 0.33, 1.72, -0.12, G, 'gateway');
+    this.box(0.008, 0.2, 0.008, '#222', 0.45, 1.72, -0.12, G, 'gateway');
+    this.label('4G', 0.06, 0.03, G, 0.39, 1.6, -0.069, {fg: '#1a6fd8'});
+    this.anchors.cb = new T.Vector3(-0.33, 1.9, 0.12);
+    this.anchors.spd = new T.Vector3(-0.08, 1.78, 0.18);
+    this.anchors.gateway = new T.Vector3(0.42, 1.95, 0.12);
+
+    // CT kẹp + 3 đồng hồ
+    const wx = [-0.4, -0.35, -0.3];
+    this.P.meterScr = [];
+    [0, 1, 2].forEach(k => {
+      const ct = this.add(new T.TorusGeometry(0.026, 0.009, 8, 20), '#222', wx[k], 1.42, -0.1, G, 'meter');
+      ct.rotation.x = Math.PI / 2;
+      const mx = -0.11 + k * 0.17;
+      this.box(0.15, 0.19, 0.08, '#2a2f37', mx, 1.24, -0.15, G, 'meter');
+      const scr = this.canvasTex(256, 160, (g, W, H, tl) => {
+        g.fillStyle = '#062a1a'; g.fillRect(0, 0, W, H);
+        g.fillStyle = '#7dffb6'; g.font = '700 44px ui-monospace, monospace'; g.textAlign = 'center';
+        const l = tl || ['---.- V', '-.-- A'];
+        g.fillText(l[0], W / 2, 62); g.fillText(l[1], W / 2, 122);
+      });
+      const pm = new T.Mesh(new T.PlaneGeometry(0.12, 0.075), new T.MeshBasicMaterial({map: scr.tex}));
+      pm.position.set(mx, 1.26, -0.109); G.add(pm);
+      this.label('PHA ' + 'ABC'[k], 0.12, 0.03, G, mx, 1.19, -0.109, {fg: '#fff'});
+      this.P.meterScr.push(scr);
+      this.tube([[wx[k], 1.42, -0.1], [wx[k] + 0.04, 1.38, -0.09], [mx, 1.34, -0.1]], 0.003, '#555', G);
+    });
+    this.anchors.meter = new T.Vector3(0.06, 1.44, 0.15);
+    this.box(0.18, 0.19, 0.04, '#123a7a', 0.43, 1.24, -0.17, G, 'gateway');
+    this.label('ESP32', 0.12, 0.035, G, 0.43, 1.28, -0.148, {fg: '#fff'});
+    this.P.led = this.add(new T.SphereGeometry(0.012, 10, 10), '#2ecc71', 0.43, 1.2, -0.145, G, null, {emissive: '#2ecc71', emissiveIntensity: 1});
+
+    // Thanh cái 3 pha + 4 contactor
+    [0, 1, 2].forEach(k => this.box(0.94, 0.012, 0.012, PH[k], 0.05, 1.07 + k * 0.022, -0.1, G, 'nguon'));
+    this.P.flags = []; this.P.kx = [-0.39, -0.13, 0.13, 0.39];
+    this.P.kx.forEach((x, c) => {
+      const id = 'k' + (c + 1);
+      this.box(0.16, 0.22, 0.14, '#3a404a', x, 0.9, -0.125, G, id);
+      this.P.flags.push(this.box(0.06, 0.035, 0.02, '#8a96a3', x, 0.93, -0.045, G));
+      this.label(cab.cfg.doNames[c].split('·')[0].trim(), 0.1, 0.04, G, x, 0.86, -0.054, {fg: '#fff'});
+      this.tube([[x, 0.79, -0.1], [x, 0.62, -0.08], [0.0 + (c - 1.5) * 0.12, 0.52, -0.08]], 0.008, '#4b4f55', G, id);
+      this.anchors[id] = new T.Vector3(x, 1.13, 0.14);
+    });
+    this.box(0.6, 0.07, 0.05, '#0f5e3a', -0.2, 0.68, -0.17, G, 'gateway');
+    this.label('RELAY K1–K4', 0.3, 0.035, G, -0.2, 0.68, -0.144, {fg: '#fff'});
+    this.box(0.95, 0.06, 0.06, '#9aa1a9', 0, 0.48, -0.16, G);
+    this.label('HÀNG KẸP RA', 0.3, 0.03, G, 0, 0.48, -0.129, {fg: '#17212b'});
+
+    // Cáp vào: từ cột điện lực vào tủ, lên CB
+    this.P.inCable = [0, 1, 2].map(k => this.tube([[-2.6, 0.02, 0.12 + k * 0.05], [-1.2, 0.02, 0.12 + k * 0.05], [-0.7, 0.03, 0.05 + k * 0.03],
+      [-0.47 + k * 0.03, 0.25, -0.1], [-0.47 + k * 0.03, 1.74, -0.1], [-0.38 + k * 0.05, 1.77, -0.1], [-0.38 + k * 0.05, 1.735, -0.1]], 0.012, PH[k], G, 'nguon'));
+    // CB → CT → thanh cái
+    [0, 1, 2].forEach(k => this.tube([[-0.38 + k * 0.05, 1.47, -0.1], [wx[k], 1.42, -0.1], [wx[k], 1.2, -0.1], [-0.42, 1.07 + k * 0.022, -0.1]], 0.009, PH[k], G, 'nguon'));
+
+    // Cáp ra đường: đoạn trước điểm cắt + đoạn sau điểm cắt
+    const CUT = 3.3;
+    this.P.outA = []; this.P.outB = []; this.P.cut = [];
+    [0, 1, 2].forEach(k => {
+      const z = 0.85 + k * 0.08, id = 'cap' + 'ABC'[k];
+      this.P.outA.push(this.tube([[(k - 1) * 0.15, 0.48, -0.1], [0.25 + k * 0.05, 0.25, -0.05], [0.45, 0.02, 0.3 + k * 0.05], [1.0, 0.02, z], [CUT - 0.06, 0.02, z]], 0.014, PH[k], S, id));
+      this.P.outB.push(this.tube([[CUT + 0.06, 0.02, z], [6, 0.02, z], [10.5, 0.02, z]], 0.014, PH[k], S, id));
+      const ball = this.add(new T.SphereGeometry(0.07, 14, 14), '#ff3b3b', CUT, 0.06, z, S, null, {emissive: '#ff0000', emissiveIntensity: 1});
+      ball.visible = false; this.P.cut.push(ball);
+      this.anchors[id] = new T.Vector3(CUT, 0.45 + k * 0.32, z);
+    });
+
+    // Cột đèn: K1 / K2 xen kẽ, pha A-B-C xoay vòng
+    this.P.posts = [];
+    for (let n = 0; n < 6; n++) {
+      const x = 1.9 + n * 1.45, ch = n % 2, ph = n % 3;
+      this.box(0.07, 3.0, 0.07, '#7d848c', x, 1.5, 1.35, S, 'den');
+      this.box(0.04, 0.04, 0.42, '#7d848c', x, 2.98, 1.55, S, 'den');
+      const head = this.box(0.16, 0.06, 0.32, '#3b3f45', x, 2.95, 1.78, S, 'den', {emissive: '#000000'});
+      head.userData.hl = false;
+      const cone = new T.Mesh(new T.ConeGeometry(0.75, 2.9, 24, 1, true), new T.MeshBasicMaterial({color: 0xfff1a8, transparent: true, opacity: 0.18, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide}));
+      cone.position.set(x, 1.48, 1.78); S.add(cone);
+      const tag = this.label(`${cab.cfg.doNames[ch].split('·')[0].trim()} · pha ${'ABC'[ph]}`, 0.5, 0.11, S, x, 1.0, 1.395, {bg: 'rgba(255,255,255,.9)', fg: '#17212b'});
+      tag.userData.seg = 'den';
+      this.P.posts.push({head, cone, ch, ph});
+    }
+    this.anchors.den = new T.Vector3(1.9 + 2 * 1.45, 3.45, 1.7);
+    // Cây trang trí (K3)
+    this.add(new T.ConeGeometry(0.35, 1.0, 10), '#2f6b3a', -1.2, 0.75, 1.2, S, 'den');
+    this.box(0.08, 0.3, 0.08, '#6b4a2b', -1.2, 0.15, 1.2, S, 'den');
+    this.P.garland = [];
+    for (let n = 0; n < 9; n++) {
+      const a = n * 1.9, h = 0.35 + n * 0.08, r = 0.33 - n * 0.032;
+      const b = this.add(new T.SphereGeometry(0.025, 8, 8), '#555', -1.2 + Math.cos(a) * r, h, 1.2 + Math.sin(a) * r, S, null, {emissive: '#000'});
+      this.P.garland.push(b);
+    }
+
+    // ---- Cửa tủ (bản lề bên trái) ----
+    const door = this.door = new T.Group(); door.position.set(-0.6, 1.0, 0.226); G.add(door);
+    this.P.doorPanel = this.box(1.2, 1.6, 0.02, '#c9cfd6', 0.6, 0, 0.01, door, 'door', {transparent: true});
+    this.box(0.04, 0.16, 0.03, '#33383f', 1.1, 0, 0.035, door, 'door');
+    this.label(`${cab.cfg.id} · TỦ ĐIỀU KHIỂN CHIẾU SÁNG`, 0.95, 0.1, door, 0.6, 0.62, 0.022, {bg: '#ffffff', fg: '#17212b', size: 0.42});
+    this.label('⚡ NGUY HIỂM ĐIỆN CAO ÁP', 0.6, 0.08, door, 0.6, 0.46, 0.022, {bg: '#f2b705', fg: '#17212b', size: 0.5});
+    this.P.pilots = [0, 1, 2].map(k => this.add(new T.SphereGeometry(0.03, 12, 12), PH[k], 0.42 + k * 0.18, 0.28, 0.035, door, null, {emissive: PH[k], emissiveIntensity: 0.9}));
+    const sw = this.P.selector = new T.Group(); sw.position.set(0.6, 0.05, 0.04); door.add(sw);
+    this.add(new T.CylinderGeometry(0.06, 0.06, 0.03, 20), '#222', 0, 0, 0, sw, 'selector').rotation.x = Math.PI / 2;
+    this.box(0.025, 0.1, 0.03, '#d63a3a', 0, 0, 0.025, sw, 'selector');
+    this.label('TAY      TỰ ĐỘNG', 0.32, 0.05, door, 0.6, 0.15, 0.022, {fg: '#17212b', size: 0.6});
+    this.doorAngle = 0;
+
+    // Nhãn cảnh báo nổi
+    SEGS.forEach(s => {
+      const m = this.sprite(segName(cab, s.id).replace('Contactor ', ''), '#d63a3a', 0.042);
+      m.userData.seg = s.id; m.visible = false; S.add(m); this.markers[s.id] = m;
+    });
+    this.needHome = true;
+  },
+
+  /* ---------- Camera ---------- */
+  home(now) {
+    const el = this.renderer && this.renderer.domElement.parentElement, portrait = el && el.clientWidth < el.clientHeight * 1.1;
+    const g = portrait ? {theta: 0.5, phi: 1.12, r: 7.8, tx: 1.1, ty: 1.1, tz: 0.6} : {theta: 0.62, phi: 1.13, r: 6.0, tx: 1.4, ty: 1.0, tz: 0.6};
+    if (now) Object.assign(this.cam, g); else this.goal = g;
+  },
+  anchorPos(id) {
+    if (id === 'door') return this.door.localToWorld(new THREE.Vector3(1.1, 0.3, 0.1));
+    if (id === 'selector') return this.door.localToWorld(new THREE.Vector3(0.6, 0.25, 0.1));
+    const a = this.anchors[id]; if (!a) return new THREE.Vector3();
+    return /^cap|nguon|den/.test(id) ? a.clone() : this.cabG.localToWorld(a.clone());
+  },
+  select(id) {
+    if (!this.scene || !SEGS.some(s => s.id === id)) return;
+    this.sel = id;
+    const p = this.anchorPos(id);
+    const far = {nguon: 3.6, den: 5.5, vo: 3.2, door: 2.4, selector: 1.6, capA: 3, capB: 3, capC: 3}[id] || 1.35;
+    const phi = /^cap/.test(id) ? 0.85 : 1.25, theta = /^cap|den/.test(id) ? 0.35 : 0.3;
+    this.goal = {theta, phi, r: far, tx: p.x, ty: /^cap/.test(id) ? 0.1 : p.y - (id === 'den' ? 1.6 : 0.12), tz: p.z};
+    this.tick();
+  },
+  pick(e) {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const v = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    this.ray.setFromCamera(v, this.camera); this.ray.camera = this.camera;
+    const hits = this.ray.intersectObjects(this.scene.children, true);
+    for (const h of hits) {
+      let o = h.object;
+      while (o && !o.userData.seg) o = o.parent;
+      if (o && (o.visible !== false)) { this.select(o.userData.seg); return; }
+    }
+  },
+
+  /* ---------- Vòng vẽ ---------- */
+  frame(ts) {
+    if (!this.renderer || !document.body.contains(this.renderer.domElement)) { this.running = false; return; }
+    const time = ts / 1000, c = this.cam;
+    if (this.goal) {
+      let done = true;
+      for (const k in this.goal) { const d = this.goal[k] - c[k]; c[k] += d * 0.09; if (Math.abs(d) > 0.002) done = false; }
+      if (done) this.goal = null;
+    }
+    this.camera.position.set(c.tx + c.r * Math.sin(c.phi) * Math.sin(c.theta), c.ty + c.r * Math.cos(c.phi), c.tz + c.r * Math.sin(c.phi) * Math.cos(c.theta));
+    this.camera.lookAt(c.tx, c.ty, c.tz);
+    this.update(time);
+    this.renderer.render(this.scene, this.camera);
+    requestAnimationFrame(t => this.frame(t));
+  },
+  update(time) {
+    const cab = App.cabs[this.key]; if (!cab) return;
+    const t = cab.tele || {}, v = t.v || [], i = t.i || [], di = t.di || [], d = t.do || [];
+    const st = this.st || (this.st = segStatus(cab));
+    const pulse = 0.5 + 0.5 * Math.sin(time * 7);
+    const night = App.settings.demo && cab.cfg.source === 'sim' ? inWindow(Clock.min(), 1080, 330) : (h => h >= 18 || h < 6)(new Date().getHours());
+    this.scene.background = new THREE.Color(night ? '#0e1828' : '#cfe3f5');
+    this.hemi.intensity = night ? 0.45 : 0.95; this.sun.intensity = night ? 0.25 : 0.8;
+
+    // Nguồn vào + đèn báo pha trên cửa
+    [0, 1, 2].forEach(k => {
+      const live = v[k] !== null && v[k] !== undefined && v[k] >= CFG.V_LOST;
+      const m = this.P.inCable[k].material;
+      m.color.set(live ? [cssVar('--pa'), cssVar('--pb'), cssVar('--pc')][k] : '#6b7480');
+      m.emissive.set(live ? m.color : '#000000'); m.emissiveIntensity = live ? 0.25 : 0;
+      this.P.pilots[k].material.emissiveIntensity = live ? 0.9 : 0;
+      if (!live) this.P.pilots[k].material.color.set('#555');
+    });
+    // CB, chống sét, contactor
+    this.P.lever.rotation.x = di[DI.CB] === 0 ? 0.7 : -0.5;
+    this.P.spdWin.material.color.set(di[DI.SPD] === 0 ? '#d63a3a' : '#1f9d55');
+    this.P.flags.forEach((f, c) => {
+      const fb = FB_OF_DO[c] >= 0 ? di[FB_OF_DO[c]] : d[c];
+      const bad = FB_OF_DO[c] >= 0 && d[c] !== undefined && fb !== d[c];
+      f.material.color.set(bad ? '#d63a3a' : fb ? '#2ecc71' : '#8a96a3');
+      f.material.emissive.set(bad || fb ? f.material.color : '#000'); f.material.emissiveIntensity = bad ? pulse : fb ? 0.5 : 0;
+    });
+    // Màn hình đồng hồ: chỉ vẽ lại khi có số liệu mới
+    if (t !== this.lastTele) {
+      this.lastTele = t; this.st = segStatus(cab);
+      this.P.meterScr.forEach((s, k) => s.draw(t.v ? [`${num(v[k], 1)} V`, `${num(i[k], 2)} A`] : ['---.- V', '-.-- A']));
+    }
+    this.P.led.material.color.set(cab.online ? '#2ecc71' : '#d63a3a');
+    this.P.led.material.emissive.set(cab.online ? '#2ecc71' : '#d63a3a');
+    this.P.led.material.emissiveIntensity = cab.online ? (Math.sin(time * 4) > 0 ? 1 : 0.2) : pulse;
+    // Cáp ra + điểm nghi cắt
+    [0, 1, 2].forEach(k => {
+      const cut = !!cab.active['CAT_CAP' + 'ABC'[k]], on = i[k] > CFG.I_ZERO, col = [cssVar('--pa'), cssVar('--pb'), cssVar('--pc')][k];
+      [this.P.outA[k], this.P.outB[k]].forEach((tb, j) => {
+        const dead = cut && j === 1;
+        tb.material.color.set(dead ? '#6b7480' : col);
+        tb.material.emissive.set(on && !dead ? col : cut && j === 0 ? '#ff0000' : '#000');
+        tb.material.emissiveIntensity = on && !dead ? 0.35 : cut && j === 0 ? pulse * 0.6 : 0;
+      });
+      this.P.cut[k].visible = cut; this.P.cut[k].scale.setScalar(0.8 + pulse * 0.6);
+    });
+    // Cột đèn và cây trang trí
+    const closed = c => FB_OF_DO[c] >= 0 ? di[FB_OF_DO[c]] === 1 : d[c] === 1;
+    this.P.posts.forEach(p => {
+      const lit = closed(p.ch) && i[p.ph] > CFG.I_ZERO;
+      p.head.material.emissive.set(lit ? '#ffe9a0' : '#000'); p.head.material.emissiveIntensity = lit ? 1 : 0;
+      p.cone.visible = lit; p.cone.material.opacity = night ? 0.13 : 0.05;
+    });
+    const k3 = closed(2) && i.some(x => x > CFG.I_ZERO);
+    this.P.garland.forEach((b, n) => { const col = ['#ff5a5a', '#ffd23f', '#5ec2ff'][n % 3]; b.material.color.set(k3 ? col : '#555'); b.material.emissive.set(k3 ? col : '#000'); b.material.emissiveIntensity = k3 ? 0.6 + 0.4 * Math.sin(time * 3 + n) : 0; });
+    // Cửa: mở thật thì xoay ra; "nhìn xuyên" làm mờ cửa khi đang đóng
+    const goalA = di[DI.DOOR] ? -1.75 : 0;
+    this.doorAngle += (goalA - this.doorAngle) * 0.08; this.door.rotation.y = this.doorAngle;
+    const dm = this.P.doorPanel.material; dm.opacity = this.seeThrough && Math.abs(this.doorAngle) < 0.3 ? 0.16 : 1; dm.depthWrite = dm.opacity > 0.5;
+    this.P.selector.rotation.z = di[DI.AUTO] === 0 ? 0.8 : -0.8;
+    // Vỏ tủ nghiêng / rung khi va chạm
+    const tilt = cab.active.NGHIENG ? Math.min(30, t.tilt || 20) : 0;
+    this.cabG.rotation.z += (-tilt * Math.PI / 180 - this.cabG.rotation.z) * 0.05;
+    this.cabG.position.x = cab.active.VA_CHAM ? Math.sin(time * 45) * 0.012 : 0;
+
+    // Nhấp nháy bộ phận có sự cố, tô xanh bộ phận đang chọn
+    for (const id in this.seg) {
+      const s = st[id], alarm = s && s.sev > 0, live = s && s.live.length > 0;
+      this.seg[id].forEach(m => {
+        if (m.userData.hl === false) return;
+        const mt = m.material;
+        if (live) { mt.emissive.set(s.sev >= 3 ? '#ff1e1e' : '#ff9500'); mt.emissiveIntensity = 0.25 + pulse * 0.6; }
+        else if (alarm) { mt.emissive.set('#ff9500'); mt.emissiveIntensity = 0.25; }
+        else if (id === this.sel) { mt.emissive.set('#1a6fd8'); mt.emissiveIntensity = 0.35; }
+        else { mt.emissive.setHex(mt.userData.base || 0); mt.emissiveIntensity = 1; }
+      });
+    }
+    for (const id in this.markers) {
+      const m = this.markers[id], s = st[id];
+      m.visible = !!(s && s.sev > 0);
+      if (m.visible) { m.position.copy(this.anchorPos(id)); m.position.y += 0.04 * Math.sin(time * 3); m.material.opacity = s.live.length ? 0.75 + pulse * 0.25 : 0.7; }
+    }
+  },
+
+  /* ---------- Phần giao diện HTML quanh mô hình ---------- */
+  tick() {
+    const cab = App.cabs[this.key]; if (!cab || !document.getElementById('seg3d')) return;
+    this.st = segStatus(cab);
+    const head = document.getElementById('cabHead'); if (head) head.innerHTML = cabHeadHtml(cab);
+    document.getElementById('seg3d').innerHTML = segPanelHtml(cab, this.st);
+    const info = document.getElementById('v3info');
+    if (info) {
+      if (!this.sel) { info.hidden = true; }
+      else {
+        const s = this.st[this.sel], seg = SEGS.find(x => x.id === this.sel);
+        info.hidden = false;
+        info.innerHTML = `<div class="row"><b class="grow">${seg.icon} ${esc(segName(cab, this.sel))}</b>${s.sev ? `<span class="pill ${s.sev >= 3 ? 'bad' : 'warn'}">Sự cố</span>` : '<span class="pill ok">Bình thường</span>'}<button class="btn sm" data-act="v3-close" aria-label="Đóng">✕</button></div>
+          <div class="sub" style="margin-top:4px">${segDetail(cab, this.sel)}</div>
+          ${s.inc.map(x => `<div class="sub" style="margin-top:4px;color:var(--ink)">⚠️ ${incLine(x)}</div>`).join('')}
+          ${s.inc.length ? `<div class="btns" style="margin-top:6px">${s.inc[0].status === 'new' ? `<button class="btn sm pri" data-act="inc" data-op="assign" data-no="${s.inc[0].no}">Giao ${esc(s.inc[0].team)}</button>` : ''}<button class="btn sm" data-act="inc" data-op="zalo" data-no="${s.inc[0].no}">📤 Zalo</button></div>` : ''}`;
+      }
+    }
+  }
+};
+function segPanelHtml(cab, st) {
+  const bad = SEGS.filter(s => st[s.id].sev > 0).sort((a, b) => st[b.id].sev - st[a.id].sev), ok = SEGS.filter(s => !st[s.id].sev);
+  return `<div class="row"><h2 class="grow" style="margin:0">Phân đoạn sự cố</h2><button class="btn sm" data-act="v3-report">📋 Báo cáo phân đoạn</button></div>
+    <p class="sub">${bad.length ? `<b style="color:var(--bad)">${bad.length}</b>/${SEGS.length} phân đoạn có sự cố. Bấm 🎯 để camera tới đúng vị trí.` : `Cả ${SEGS.length} phân đoạn bình thường.`}</p>
+    ${bad.map(s => {
+      const x = st[s.id];
+      return `<div class="io" style="align-items:flex-start"><span class="led bad" style="margin-top:4px"></span><div class="grow">
+        <b>${s.icon} ${esc(segName(cab, s.id))}</b> <span class="pill ${x.sev >= 3 ? 'bad' : 'warn'}">${x.live.length ? 'Đang báo' : 'Chờ xử lý'}</span>
+        <div class="sub">${segDetail(cab, s.id)}</div>
+        ${x.inc.map(i => `<div class="sub" style="color:var(--ink)">${incLine(i)}</div>`).join('')}
+        <div class="btns" style="margin-top:6px"><button class="btn sm" data-act="v3-focus" data-seg="${s.id}">🎯 Xem trên 3D</button>
+          ${x.inc[0] && x.inc[0].status === 'new' ? `<button class="btn sm pri" data-act="inc" data-op="assign" data-no="${x.inc[0].no}">Giao ${esc(x.inc[0].team)}</button>` : ''}
+          ${x.inc[0] ? `<button class="btn sm" data-act="inc" data-op="zalo" data-no="${x.inc[0].no}">📤 Zalo</button>` : ''}</div></div></div>`;
+    }).join('')}
+    <h3>Bình thường (${ok.length})</h3>
+    <div class="lamps">${ok.map(s => `<button class="lamp" data-act="v3-focus" data-seg="${s.id}" style="cursor:pointer"><i style="background:var(--ok)"></i>${esc(segName(cab, s.id).replace('Contactor ', ''))}</button>`).join('')}</div>`;
+}
+function tab3D(cab) {
+  return `<div class="panel v3wrap"><div id="v3d"><div class="empty">Đang tải mô hình 3D…</div></div>
+      <div class="v3tools">
+        <button class="btn sm" data-act="v3-home" title="Toàn cảnh">🎯 Toàn cảnh</button>
+        <button class="btn sm" data-act="v3-see" title="Nhìn xuyên cửa tủ">${V3.seeThrough ? '🚪 Hiện cửa' : '👁️ Nhìn xuyên'}</button>
+      </div>
+      <div class="v3info" id="v3info" hidden></div>
+      <div class="v3hint">Kéo để xoay · chụm 2 ngón hoặc lăn chuột để phóng to · chạm vào bộ phận để xem</div>
+    </div>
+    <div class="panel" id="seg3d"></div>`;
 }
 
 /* ---------- Khởi động ---------- */
