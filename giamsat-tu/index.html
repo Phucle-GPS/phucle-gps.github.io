@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Giám sát tủ chiếu sáng</title>
+<meta name="description" content="Mô phỏng gateway IoT tủ chiếu sáng công cộng: phát hiện cắt cáp, va chạm, mở tủ, mất điện và phân công sự cố cho tổ đội.">
+<style>
+:root{
+  --bg:#f3f5f8; --card:#ffffff; --ink:#17212b; --muted:#5f6b78; --line:#e2e7ed;
+  --accent:#1a6fd8; --accent-ink:#ffffff;
+  --ok:#1f9d55; --warn:#d98a00; --bad:#d63a3a; --off:#8a96a3;
+  --ok-bg:#e6f6ec; --warn-bg:#fff4dc; --bad-bg:#fdeaea; --off-bg:#eef1f4;
+  --pa:#d6451f; --pb:#d9a400; --pc:#2b6fd6;
+  --shadow:0 2px 10px rgba(16,30,50,.07);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1419; --card:#18202a; --ink:#e7edf3; --muted:#9aa7b4; --line:#2a3542;
+    --accent:#4d9bff; --accent-ink:#06121f;
+    --ok:#3ccf7d; --warn:#f0b13a; --bad:#ff6b6b; --off:#7d8996;
+    --ok-bg:#12301f; --warn-bg:#33270c; --bad-bg:#3a1717; --off-bg:#222c37;
+    --pa:#ff7a52; --pb:#f2c53d; --pc:#5e9bff;
+    --shadow:0 2px 10px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1419; --card:#18202a; --ink:#e7edf3; --muted:#9aa7b4; --line:#2a3542;
+  --accent:#4d9bff; --accent-ink:#06121f;
+  --ok:#3ccf7d; --warn:#f0b13a; --bad:#ff6b6b; --off:#7d8996;
+  --ok-bg:#12301f; --warn-bg:#33270c; --bad-bg:#3a1717; --off-bg:#222c37;
+  --pa:#ff7a52; --pb:#f2c53d; --pc:#5e9bff;
+  --shadow:0 2px 10px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+button,select,input{font:inherit;color:inherit}
+header{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--line);padding:10px 16px}
+.hwrap{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.htitle{font-weight:700;font-size:16px;flex:1;min-width:150px}
+.htitle small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.clock{display:flex;align-items:center;gap:6px;background:var(--off-bg);padding:5px 10px;border-radius:999px;font-variant-numeric:tabular-nums;font-weight:600}
+.clock select{border:0;background:transparent;font-weight:600;padding:0;cursor:pointer}
+main{max-width:760px;margin:0 auto;padding:14px 16px}
+.view{display:none}.view.on{display:block}
+h2{font-size:17px;margin:4px 0 10px}
+h3{font-size:15px;margin:16px 0 8px}
+.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.chip{background:var(--card);border-radius:12px;padding:10px;box-shadow:var(--shadow);text-align:center}
+.chip b{display:block;font-size:22px;line-height:1.1}
+.chip span{font-size:12px;color:var(--muted)}
+.chip.ok b{color:var(--ok)}.chip.bad b{color:var(--bad)}.chip.off b{color:var(--off)}
+.list{display:flex;flex-direction:column;gap:10px}
+.card{background:var(--card);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);border-left:5px solid var(--ok)}
+.card.s-bad{border-left-color:var(--bad)}.card.s-warn{border-left-color:var(--warn)}.card.s-off{border-left-color:var(--off)}
+.cab{cursor:pointer}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.cid{font-weight:700}
+.sub{color:var(--muted);font-size:13px}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--off-bg);color:var(--muted);white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.bad{background:var(--bad-bg);color:var(--bad)}.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.src{background:transparent;border:1px solid var(--line)}
+.phases{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+.ph{background:var(--off-bg);border-radius:8px;padding:5px 8px;font-size:13px;font-variant-numeric:tabular-nums}
+.ph i{font-style:normal;font-weight:700;margin-right:4px}
+.ph.zero{background:var(--bad-bg);color:var(--bad)}
+.bar{height:4px;border-radius:2px;background:var(--line);margin-top:4px;overflow:hidden}
+.bar div{height:100%}
+.alarms{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:8px 12px;cursor:pointer;font-weight:600}
+.btn:active{transform:scale(.98)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:5px 10px;font-size:13px}
+.btn.on{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px}
+.tabs button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.inc .ttl{font-weight:700}
+.inc .act{font-size:13px;color:var(--muted);background:var(--off-bg);border-radius:8px;padding:6px 9px;margin-top:8px}
+.inc select{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:7px 8px}
+.inc .log{font-size:12px;color:var(--muted);margin-top:6px}
+.empty{text-align:center;color:var(--muted);padding:30px 10px}
+nav.bottom{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
+nav.bottom div{display:flex;max-width:760px;width:100%}
+nav.bottom button{flex:1;border:0;background:transparent;padding:9px 4px 10px;font-size:12px;color:var(--muted);cursor:pointer;position:relative}
+nav.bottom button b{display:block;font-size:20px;line-height:1.2}
+nav.bottom button.on{color:var(--accent);font-weight:700}
+.badge{position:absolute;top:4px;left:calc(50% + 6px);background:var(--bad);color:#fff;border-radius:999px;font-size:11px;padding:0 6px;min-width:18px;font-weight:700}
+.panel{background:var(--card);border-radius:14px;padding:14px;box-shadow:var(--shadow);margin-bottom:12px}
+.faults{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.faults .btn{text-align:left;font-weight:500;font-size:14px}
+.faults .btn small{display:block;color:var(--muted);font-weight:400;font-size:12px}
+.faults .btn.on small{color:inherit}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.field label{font-size:13px;color:var(--muted)}
+.field input,.field select{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 10px}
+.console{background:#0b1016;color:#b9e3c6;border-radius:10px;padding:10px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;height:230px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+.console .t{color:#7fb2ff}.console .a{color:#ff9a8a}.console .s{color:#f2c53d}
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;display:none}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--card);border-radius:18px 18px 0 0;max-height:88vh;overflow:auto;padding:16px 16px calc(20px + env(safe-area-inset-bottom));display:none;max-width:760px;margin:0 auto}
+.sheet.on,.sheet-bg.on{display:block}
+.kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.kv div{background:var(--off-bg);border-radius:10px;padding:8px}
+.kv span{display:block;font-size:12px;color:var(--muted)}
+.kv b{font-variant-numeric:tabular-nums}
+canvas{width:100%;height:150px;display:block;background:var(--off-bg);border-radius:10px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:4px}
+.legend i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:4px;vertical-align:middle}
+.toast{position:fixed;left:50%;transform:translateX(-50%);top:70px;z-index:60;background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:12px;box-shadow:var(--shadow);font-size:14px;max-width:min(92vw,520px);opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+.note{font-size:13px;color:var(--muted)}
+pre.report{white-space:pre-wrap;background:var(--off-bg);padding:10px;border-radius:10px;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace}
+@media (max-width:420px){.chips{grid-template-columns:repeat(2,1fr)}.faults .btn{font-size:13px;padding:8px 9px}.kv{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hwrap">
+    <div class="htitle">Giám sát tủ chiếu sáng<small>Mô phỏng gateway IoT · dữ liệu mẫu</small></div>
+    <div class="clock" title="Giờ mô phỏng">
+      <span id="dayIcon">🌙</span><span id="simTime">--:--</span>
+      <select id="speed" aria-label="Tốc độ mô phỏng">
+        <option value="1">1×</option>
+        <option value="60" selected>60×</option>
+        <option value="600">600×</option>
+      </select>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ======================= TỦ ĐIỆN ======================= -->
+  <section class="view on" id="v-cab">
+    <div class="chips">
+      <div class="chip"><b id="cTotal">0</b><span>Tổng tủ</span></div>
+      <div class="chip ok"><b id="cOk">0</b><span>Bình thường</span></div>
+      <div class="chip bad"><b id="cBad">0</b><span>Có sự cố</span></div>
+      <div class="chip off"><b id="cOff">0</b><span>Mất kết nối</span></div>
+    </div>
+    <div class="list" id="cabList"></div>
+  </section>
+
+  <!-- ======================= SỰ CỐ ======================= -->
+  <section class="view" id="v-inc">
+    <div class="row" style="margin-bottom:8px">
+      <h2 class="grow" style="margin:0">Sự cố cần xử lý</h2>
+      <button class="btn sm" id="btnReport">📋 Báo cáo</button>
+      <button class="btn sm" id="btnCsv">⬇️ Excel</button>
+    </div>
+    <div class="tabs" id="incTabs">
+      <button data-f="open" class="on">Chưa xong</button>
+      <button data-f="new">Mới</button>
+      <button data-f="assigned">Đã giao</button>
+      <button data-f="doing">Đang xử lý</button>
+      <button data-f="done">Hoàn thành</button>
+      <button data-f="all">Tất cả</button>
+    </div>
+    <div class="list" id="incList"></div>
+  </section>
+
+  <!-- ======================= GIẢ LẬP ======================= -->
+  <section class="view" id="v-sim">
+    <div class="panel">
+      <h2>Tạo sự cố trên thiết bị giả lập</h2>
+      <div class="field">
+        <label for="simCab">Chọn tủ</label>
+        <select id="simCab"></select>
+      </div>
+      <div class="faults" id="faults"></div>
+      <div class="btns">
+        <button class="btn" id="btnRestore">✅ Khôi phục tủ này</button>
+        <button class="btn" id="btnRandom">🎲 Sự cố ngẫu nhiên: TẮT</button>
+      </div>
+      <h3>Nhảy giờ</h3>
+      <div class="btns" style="margin-top:0">
+        <button class="btn sm" data-jump="17:59:30">17:59 (sắp bật đèn)</button>
+        <button class="btn sm" data-jump="05:29:30">05:29 (sắp tắt đèn)</button>
+        <button class="btn sm" data-jump="12:00:00">12:00 (ban ngày)</button>
+        <button class="btn sm" data-jump="20:00:00">20:00 (ban đêm)</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row"><h2 class="grow" style="margin:0">Bản tin MQTT</h2><button class="btn sm" id="btnClear">Xoá</button></div>
+      <p class="note">Đây chính là các bản tin mà ESP32 trong tủ gửi lên broker. App bên trên chỉ đọc các bản tin này.</p>
+      <div class="console" id="console"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Kết nối thiết bị thật / Wokwi</h2>
+      <p class="note">Chạy firmware trong thư mục <code>firmware/</code> trên wokwi.com hoặc trên ESP32 thật, rồi kết nối tại đây để app nhận dữ liệu thật qua broker HiveMQ công cộng. Chỉ dùng thử nghiệm: broker công cộng ai cũng nghe được, nên đặt mã kênh khó đoán.</p>
+      <div class="field">
+        <label for="mqRoot">Mã kênh (TOPIC_ROOT, trùng với firmware)</label>
+        <input id="mqRoot" value="cs/demo-doi-cs" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="mqUrl">Broker WebSocket</label>
+        <input id="mqUrl" value="wss://broker.hivemq.com:8884/mqtt" autocomplete="off">
+      </div>
+      <div class="row">
+        <button class="btn pri" id="btnMq">Kết nối</button>
+        <span class="sub" id="mqState">Chưa kết nối</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Cài đặt</h2>
+      <div class="btns" style="margin-top:0">
+        <button class="btn" id="btnSound">🔕 Âm báo: TẮT</button>
+        <button class="btn danger" id="btnReset">Xoá dữ liệu sự cố</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav class="bottom"><div>
+  <button data-v="cab" class="on"><b>🗄️</b>Tủ điện</button>
+  <button data-v="inc"><b>🚨</b>Sự cố<span class="badge" id="incBadge" hidden>0</span></button>
+  <button data-v="sim"><b>🧪</b>Giả lập</button>
+</div></nav>
+
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   CẤU HÌNH – giống hệt firmware tu_chieu_sang.ino
+   ===================================================================== */
+const CFG = {
+  I_LOADED: 1.0, I_ZERO: 0.2,
+  V_LOST: 100, V_MIN_OK: 180, V_MAX_OK: 250,
+  TILT_ALARM: 15, VIB_ALARM_G: 0.6,
+  DEBOUNCE_N: 3, VOLT_DEBOUNCE_N: 10,
+  RELAY_GRACE_TICKS: 10,        // firmware: 30 s – rút ngắn cho demo
+  COLLISION_COOLDOWN_TICKS: 60,
+  ON: [18, 0], OFF: [5, 30],
+  TELE_EVERY: 5,                // firmware: 10 s – rút ngắn cho demo
+  LWT_AFTER: 15,                // broker báo offline sau ~15 s mất kết nối
+  OFFLINE_AFTER_S: 30           // app tự coi là mất kết nối nếu im lặng quá lâu
+};
+
+const ALARM = {
+  CAT_CAP:     {label:'Nghi cắt / trộm cáp', sev:3, icon:'✂️', act:'Cử tổ kiểm tra tuyến cáp sau tủ, chụp ảnh hiện trường. Nếu xác nhận mất cắp: báo công an phường, lập biên bản.'},
+  VA_CHAM:     {label:'Xe va chạm',          sev:3, icon:'💥', act:'Kiểm tra trụ/tủ, chụp ảnh, ghi biển số xe và thông tin người gây ra (nếu có), lập biên bản bồi thường.'},
+  MO_CUA:      {label:'Mở cửa tủ trái phép', sev:3, icon:'🚪', act:'Xác minh có tổ nào đang làm việc tại tủ không. Nếu không có: cử người đến kiểm tra ngay.'},
+  MAT_DIEN:    {label:'Mất điện lưới',       sev:2, icon:'⚡', act:'Liên hệ điện lực khu vực hỏi lịch cắt điện hoặc sự cố lưới.'},
+  MAT_PHA:     {label:'Mất pha',             sev:2, icon:'⚡', act:'Kiểm tra CB tổng, cầu chì, đầu cốt pha bị mất.'},
+  KHONG_SANG:  {label:'Đèn không sáng',      sev:2, icon:'🌑', act:'Kiểm tra contactor, CB nhánh, bộ hẹn giờ trong tủ.'},
+  NGHIENG:     {label:'Tủ / trụ bị nghiêng', sev:2, icon:'📐', act:'Kiểm tra móng, chân đế; rào chắn nếu có nguy cơ đổ.'},
+  MAT_KET_NOI: {label:'Mất kết nối thiết bị',sev:2, icon:'📡', act:'Kiểm tra nguồn gateway, SIM 4G / Wi-Fi tại tủ. Thiết bị vẫn ghi log và gửi bù khi có mạng lại.'},
+  SANG_NGAY:   {label:'Đèn sáng ban ngày',   sev:1, icon:'☀️', act:'Nghi dính tiếp điểm contactor – thay contactor.'},
+  DIEN_AP:     {label:'Điện áp bất thường',  sev:1, icon:'〰️', act:'Theo dõi; báo điện lực nếu kéo dài.'},
+  LOI_DONG_HO: {label:'Lỗi đồng hồ RS485',   sev:1, icon:'🔌', act:'Kiểm tra dây RS485, nguồn đồng hồ, địa chỉ Modbus.'}
+};
+const STATUS = {new:'Mới', assigned:'Đã giao', doing:'Đang xử lý', done:'Hoàn thành'};
+const TEAMS = ['Tổ 1', 'Tổ 2', 'Tổ 3', 'Tổ trực đêm'];
+
+const SAMPLE = [
+  {id:'TU-001', name:'Trục đường số 1',     area:'Khu vực 1', team:'Tổ 1', load:[3.2,2.9,3.4]},
+  {id:'TU-002', name:'Trục đường số 2',     area:'Khu vực 1', team:'Tổ 1', load:[2.4,2.6,2.2]},
+  {id:'TU-003', name:'Nút giao trung tâm',  area:'Khu vực 1', team:'Tổ 1', load:[4.1,3.8,4.0]},
+  {id:'TU-004', name:'Công viên phía Bắc',  area:'Khu vực 2', team:'Tổ 2', load:[1.8,1.6,1.9]},
+  {id:'TU-005', name:'Cầu vượt số 1',       area:'Khu vực 2', team:'Tổ 2', load:[3.5,3.3,3.6]},
+  {id:'TU-006', name:'Đường ven sông',      area:'Khu vực 2', team:'Tổ 2', load:[2.9,3.1,2.7]},
+  {id:'TU-007', name:'Khu dân cư mới',      area:'Khu vực 3', team:'Tổ 3', load:[1.5,1.4,1.6]},
+  {id:'TU-008', name:'Quốc lộ đoạn ngoại ô',area:'Khu vực 3', team:'Tổ 3', load:[5.2,4.9,5.1]}
+];
+
+/* ===================== Tiện ích ===================== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2, '0');
+const fmtTime = ms => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}/${pad(d.getMonth()+1)}`; };
+const rnd = (a, b) => a + Math.random() * (b - a);
+const store = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+};
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 3200); }
+
+/* ===================== Đồng hồ mô phỏng ===================== */
+const Clock = {
+  ms: (() => { const d = new Date(); d.setHours(18, 20, 0, 0); return d.getTime(); })(),
+  speed: 60,
+  date(){ return new Date(this.ms); },
+  jump(hms){ const [h,m,s] = hms.split(':').map(Number); const d = this.date(); d.setHours(h, m, s, 0); this.ms = d.getTime(); }
+};
+function isNightAt(d){
+  const now = d.getHours()*60 + d.getMinutes(), on = CFG.ON[0]*60+CFG.ON[1], off = CFG.OFF[0]*60+CFG.OFF[1];
+  return on > off ? (now >= on || now < off) : (now >= on && now < off);
+}
+
+/* =====================================================================
+   THIẾT BỊ GIẢ LẬP – logic chép từ firmware (applyRelay / readMeters / analyze)
+   ===================================================================== */
+class SimDevice {
+  constructor(meta){
+    this.meta = meta; this.id = meta.id;
+    this.faults = {cut:[false,false,false], mains:false, contactorFail:false, contactorStuck:false, door:false, offline:false, meterFail:false};
+    this.mode = 'auto'; this.maint = false;
+    this.relayOn = isNightAt(Clock.date());
+    this.relayTick = -1000;                         // coi như đã chạy ổn định từ trước
+    this.loaded = [this.relayOn, this.relayOn, this.relayOn];
+    this.anyLoad = this.relayOn;
+    this.ph = [0,1,2].map(() => ({v:0, i:0, p:0, ok:true}));
+    this.wh = rnd(1500, 9000) * 1000;
+    this.tilt = rnd(0.2, 1.2); this.vib = 0; this.lastCollision = -1e9;
+    this.meterFail = 0; this.alarms = {};
+    this.tick = Math.floor(Math.random() * CFG.TELE_EVERY);
+    this.queue = []; this.offTicks = 0; this.lwtSent = false;
+  }
+  topic(leaf){ return `${App.root()}/tu/${this.id}/${leaf}`; }
+  out(leaf, obj, retain){
+    if (this.faults.offline) { if (leaf === 'alarm') this.queue.push(obj); return; }   // giữ lại, gửi bù sau
+    Bus.publish(this.topic(leaf), obj, 'sim', retain);
+  }
+  wantsOn(){ return this.mode === 'on' || (this.mode === 'auto' && isNightAt(Clock.date())); }
+  applyRelay(){
+    const w = this.wantsOn();
+    if (w !== this.relayOn){ this.relayOn = w; this.relayTick = this.tick; this.loaded = [false,false,false]; this.anyLoad = false; }
+  }
+  readMeters(){
+    const f = this.faults;
+    const lampsOn = (this.relayOn && !f.contactorFail) || f.contactorStuck;
+    for (let k = 0; k < 3; k++){
+      const p = this.ph[k];
+      if (f.meterFail){ p.ok = false; continue; }
+      p.ok = true;
+      p.v = f.mains ? rnd(0, 3) : 225 + rnd(-2, 2);
+      p.i = (!f.mains && lampsOn && !f.cut[k]) ? this.meta.load[k] * (1 + rnd(-0.03, 0.03)) : rnd(0, 0.03);
+      p.p = p.v * p.i * 0.95;
+      this.wh += p.p * Clock.speed / 3600;          // điện năng theo giờ mô phỏng
+    }
+    this.meterFail = f.meterFail ? this.meterFail + 1 : 0;
+  }
+  send(code, phase, on, msg){
+    this.out('alarm', {id:this.id, code, phase, state:on?'on':'off', ts:Math.floor(Clock.ms/1000), msg,
+      v:this.ph.map(p => +p.v.toFixed(1)), i:this.ph.map(p => +p.i.toFixed(2))});
+  }
+  evalAlarm(key, code, phase, cond, need, msgOn, msgOff){
+    const a = this.alarms[key] || (this.alarms[key] = {cnt:0, active:false});
+    if (cond){ a.cnt++; if (!a.active && a.cnt >= need){ a.active = true; this.send(code, phase, true, msgOn); } }
+    else { a.cnt = 0; if (a.active){ a.active = false; this.send(code, phase, false, msgOff); } }
+  }
+  analyze(){
+    const ph = this.ph, settled = this.tick - this.relayTick > CFG.RELAY_GRACE_TICKS;
+    const lost = ph.filter(p => p.ok && p.v < CFG.V_LOST).length, allLost = lost === 3;
+    this.evalAlarm('MAT_DIEN','MAT_DIEN','-', allLost, CFG.DEBOUNCE_N, 'Mất điện lưới cả 3 pha', 'Đã có điện lại');
+    for (let k = 0; k < 3; k++){
+      const P = 'ABC'[k];
+      this.evalAlarm('MAT_PHA'+P,'MAT_PHA',P, !allLost && ph[k].ok && ph[k].v < CFG.V_LOST, CFG.DEBOUNCE_N, 'Mất điện áp pha', 'Pha đã có điện áp');
+    }
+    const vBad = ph.some(p => p.ok && p.v >= CFG.V_LOST && (p.v < CFG.V_MIN_OK || p.v > CFG.V_MAX_OK));
+    this.evalAlarm('DIEN_AP','DIEN_AP','-', vBad, CFG.VOLT_DEBOUNCE_N, 'Điện áp bất thường', 'Điện áp bình thường');
+
+    for (let k = 0; k < 3; k++){
+      const P = 'ABC'[k], vOk = ph[k].ok && ph[k].v >= CFG.V_MIN_OK;
+      if (this.relayOn && ph[k].ok && ph[k].i >= CFG.I_LOADED){ this.loaded[k] = true; this.anyLoad = true; }
+      const cut = this.relayOn && this.loaded[k] && vOk && ph[k].i < CFG.I_ZERO;
+      this.evalAlarm('CAT_CAP'+P,'CAT_CAP',P, cut, CFG.DEBOUNCE_N, 'Pha đang tải bị mất dòng, điện áp còn – nghi cắt/trộm cáp', 'Pha đã có dòng trở lại');
+    }
+    const iSum = ph.reduce((s,p) => s + (p.ok ? p.i : 0), 0);
+    const allVOk = ph.every(p => p.ok && p.v >= CFG.V_MIN_OK);
+    this.evalAlarm('KHONG_SANG','KHONG_SANG','-', this.relayOn && settled && allVOk && !this.anyLoad && iSum < CFG.I_ZERO*3,
+      CFG.DEBOUNCE_N, 'Đã đóng relay nhưng không có dòng – kiểm tra contactor/CB', 'Đèn đã sáng');
+    this.evalAlarm('SANG_NGAY','SANG_NGAY','-', !this.relayOn && settled && iSum >= CFG.I_LOADED,
+      CFG.DEBOUNCE_N, 'Relay đã cắt nhưng vẫn có dòng – nghi dính contactor', 'Đèn đã tắt');
+
+    if (this.vib > CFG.VIB_ALARM_G && this.tick - this.lastCollision > CFG.COLLISION_COOLDOWN_TICKS){
+      this.lastCollision = this.tick;
+      this.send('VA_CHAM','-', true, `Rung động mạnh ${this.vib.toFixed(2)}g – nghi xe va chạm`);
+    }
+    this.vib = 0;
+    this.evalAlarm('NGHIENG','NGHIENG','-', this.tilt > CFG.TILT_ALARM, CFG.DEBOUNCE_N, 'Tủ/trụ bị nghiêng', 'Đã hết nghiêng');
+    this.evalAlarm('MO_CUA','MO_CUA','-', this.faults.door && !this.maint, 2, 'Cửa tủ bị mở ngoài giờ bảo trì', 'Cửa tủ đã đóng');
+    this.evalAlarm('LOI_DONG_HO','LOI_DONG_HO','-', this.meterFail >= 5, 1, 'Không đọc được đồng hồ điện RS485', 'Đồng hồ đã phản hồi');
+  }
+  telemetry(){
+    const ph = this.ph;
+    this.out('telemetry', {id:this.id, ts:Math.floor(Clock.ms/1000),
+      p:Math.round(ph.reduce((s,p) => s + (p.ok ? p.p : 0), 0)), kwh:+(this.wh/1000).toFixed(2),
+      relay:this.relayOn?1:0, mode:this.mode, maint:this.maint?1:0, door:this.faults.door?1:0,
+      tilt:+this.tilt.toFixed(1), rssi:Math.round(rnd(-78,-55)), q:this.queue.length,
+      v:ph.map(p => p.ok ? +p.v.toFixed(1) : null), i:ph.map(p => p.ok ? +p.i.toFixed(2) : null)});
+  }
+  step(){
+    this.tick++;
+    this.applyRelay(); this.readMeters(); this.analyze();
+    if (this.faults.offline){
+      this.offTicks++;
+      if (this.offTicks === CFG.LWT_AFTER && !this.lwtSent){ this.lwtSent = true; Bus.publish(this.topic('status'), 'offline', 'sim', true); }
+    } else if (this.tick % CFG.TELE_EVERY === 0) this.telemetry();
+  }
+  setOffline(on){
+    this.faults.offline = on;
+    if (!on){                                       // có mạng lại: online + gửi bù hàng đợi
+      this.offTicks = 0; this.lwtSent = false;
+      Bus.publish(this.topic('status'), 'online', 'sim', true);
+      const q = this.queue; this.queue = [];
+      q.forEach(m => Bus.publish(this.topic('alarm'), m, 'sim'));
+      this.telemetry();
+    }
+  }
+  onCmd(cmd){
+    if (['on','off','auto'].includes(cmd)) this.mode = cmd;
+    if (cmd === 'maint_on') this.maint = true;
+    if (cmd === 'maint_off') this.maint = false;
+    this.applyRelay(); this.telemetry();
+  }
+}
+
+/* ===================== Bus: thay cho broker MQTT ===================== */
+const Bus = {
+  lines: [],
+  publish(topic, payload, source, retain){
+    const text = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    this.log(topic, text);
+    App.onMessage(topic, text, source);
+  },
+  log(topic, text){
+    const leaf = topic.split('/').pop(), cls = leaf === 'alarm' ? 'a' : (leaf === 'status' || leaf === 'cmd') ? 's' : '';
+    this.lines.push(`<span class="t">${esc(topic)}</span> <span class="${cls}">${esc(text)}</span>`);
+    if (this.lines.length > 150) this.lines.shift();
+    this.dirty = true;
+  },
+  flush(){
+    if (!this.dirty) return; this.dirty = false;
+    const c = $('#console'); const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 30;
+    c.innerHTML = this.lines.join('\n');
+    if (atBottom) c.scrollTop = c.scrollHeight;
+  }
+};
+
+/* =====================================================================
+   APP GIÁM SÁT
+   ===================================================================== */
+const App = {
+  cabs: {}, devices: {}, incidents: [], seq: 0, filter: 'open', openKey: null,
+  random: false, sound: false, mq: null, incDirty: true,
+  root(){ return ($('#mqRoot').value || 'cs/demo').trim(); },
+
+  init(){
+    const saved = store.get('gstu.v1', null);
+    if (saved){ this.incidents = saved.incidents || []; this.seq = saved.seq || 0; }
+    SAMPLE.forEach(m => {
+      this.devices[m.id] = new SimDevice(m);
+      this.ensureCab('sim', m.id, m);
+    });
+    Object.values(this.devices).forEach(d => d.telemetry());
+  },
+  save(){ store.set('gstu.v1', {incidents: this.incidents.slice(-500), seq: this.seq}); },
+
+  ensureCab(source, id, meta){
+    const key = source + ':' + id;
+    if (!this.cabs[key]){
+      const m = meta || {name: source === 'mqtt' ? 'Thiết bị thật / Wokwi' : id, area: '—', team: TEAMS[0]};
+      this.cabs[key] = {key, id, source, name:m.name, area:m.area, team:m.team, tele:null, lastSeen:Date.now(), online:true, hist:[], active:{}};
+    }
+    return this.cabs[key];
+  },
+  nowFor(cab){ return cab.source === 'sim' ? Clock.ms : Date.now(); },
+
+  onMessage(topic, text, source){
+    const parts = topic.split('/'); if (parts.length < 3) return;
+    const leaf = parts.pop(), id = parts.pop();
+    const cab = this.ensureCab(source, id);
+    if (leaf === 'status'){
+      if (text === 'offline') this.markOffline(cab, 'Broker báo thiết bị mất kết nối (LWT)');
+      else this.markOnline(cab);
+      return;
+    }
+    let m; try { m = JSON.parse(text); } catch(e){ return; }
+    cab.lastSeen = Date.now();
+    if (!cab.online) this.markOnline(cab);
+    if (leaf === 'telemetry'){
+      cab.tele = m;
+      cab.hist.push(m.i || [0,0,0]); if (cab.hist.length > 60) cab.hist.shift();
+    } else if (leaf === 'alarm') this.onAlarm(cab, m);
+  },
+
+  markOffline(cab, why){
+    if (!cab.online) return; cab.online = false;
+    this.onAlarm(cab, {code:'MAT_KET_NOI', phase:'-', state:'on', msg:why, ts:0});
+  },
+  markOnline(cab){
+    if (cab.online) return; cab.online = true; cab.lastSeen = Date.now();
+    this.onAlarm(cab, {code:'MAT_KET_NOI', phase:'-', state:'off', msg:'Thiết bị kết nối lại', ts:0});
+  },
+
+  onAlarm(cab, m){
+    const info = ALARM[m.code]; if (!info) return;
+    const at = m.ts ? m.ts * 1000 : this.nowFor(cab);
+    const phase = m.phase && m.phase !== '-' ? m.phase : null;
+    const akey = m.code + (phase || '');
+    if (m.state === 'on') cab.active[akey] = m.code === 'VA_CHAM' ? {...m, exp: Date.now() + 60000} : m;   // sự kiện tức thời: hiện 60 s
+    else delete cab.active[akey];
+
+    // Gộp: cùng tủ + cùng loại + chưa xong -> 1 sự cố (pha A, B, C gộp chung)
+    let inc = this.incidents.find(x => x.cab === cab.key && x.code === m.code && x.status !== 'done');
+    if (m.state === 'on'){
+      const iTxt = m.i && phase ? ` (I=${m.i['ABC'.indexOf(phase)]} A, U=${m.v['ABC'.indexOf(phase)]} V)` : '';
+      if (inc){
+        inc.count++; inc.cleared = false;
+        if (phase && !inc.phases.includes(phase)) inc.phases.push(phase);
+        if (phase && !inc.activePh.includes(phase)) inc.activePh.push(phase);
+        inc.log.push({t: at, s: `Thiết bị báo lại${phase ? ' pha ' + phase : ''}${iTxt}`});
+      } else {
+        inc = {no: 'SC-' + String(++this.seq).padStart(4, '0'), cab: cab.key, tu: cab.id, name: cab.name, area: cab.area,
+          code: m.code, phases: phase ? [phase] : [], activePh: phase ? [phase] : [], msg: m.msg, at, status: 'new',
+          team: cab.team, note: '', count: 1, cleared: false, src: cab.source,
+          log: [{t: at, s: `Phát hiện: ${m.msg}${iTxt}`}]};
+        this.incidents.push(inc);
+        toast(`${info.icon} ${cab.id}: ${info.label}${phase ? ' – pha ' + phase : ''}`);
+        if (info.sev >= 3) this.alert();
+      }
+    } else if (inc){
+      if (phase) inc.activePh = inc.activePh.filter(p => p !== phase);
+      if (!phase || inc.activePh.length === 0){
+        inc.cleared = true;
+        inc.log.push({t: at, s: `Thiết bị báo đã hết: ${m.msg}`});
+      }
+    }
+    this.save(); this.incDirty = true;
+  },
+
+  alert(){
+    try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch(e){}
+    if (!this.sound || !this.ac) return;
+    try {
+      const o = this.ac.createOscillator(), g = this.ac.createGain();
+      o.frequency.value = 880; g.gain.value = 0.15; o.connect(g); g.connect(this.ac.destination);
+      o.start(); o.stop(this.ac.currentTime + 0.35);
+    } catch(e){}
+  },
+
+  cabState(cab){
+    if (!cab.online) return 'off';
+    const codes = Object.values(cab.active).map(a => ALARM[a.code]?.sev || 1);
+    if (!codes.length) return 'ok';
+    return Math.max(...codes) >= 3 ? 'bad' : 'warn';
+  },
+
+  sendCmd(cab, cmd){
+    const topic = `${this.root()}/tu/${cab.id}/cmd`;
+    if (cab.source === 'sim'){ Bus.log(topic, cmd); this.devices[cab.id].onCmd(cmd); }
+    else if (this.mq && this.mq.connected){ this.mq.publish(topic, cmd); Bus.log(topic, cmd); }
+    else { toast('Chưa kết nối broker'); return; }
+    toast(`Đã gửi lệnh "${cmd}" tới ${cab.id}`);
+  },
+
+  /* ---------- Hiển thị ---------- */
+  renderCabs(){
+    const cabs = Object.values(this.cabs);
+    const st = cabs.map(c => this.cabState(c));
+    $('#cTotal').textContent = cabs.length;
+    $('#cOk').textContent = st.filter(s => s === 'ok').length;
+    $('#cBad').textContent = st.filter(s => s === 'bad' || s === 'warn').length;
+    $('#cOff').textContent = st.filter(s => s === 'off').length;
+    const order = {bad:0, warn:1, off:2, ok:3};
+    cabs.sort((a, b) => order[this.cabState(a)] - order[this.cabState(b)] || a.id.localeCompare(b.id));
+    $('#cabList').innerHTML = cabs.map(c => {
+      const s = this.cabState(c), t = c.tele || {};
+      const pill = {ok:'<span class="pill ok">Bình thường</span>', warn:'<span class="pill warn">Cảnh báo</span>',
+                    bad:'<span class="pill bad">Sự cố</span>', off:'<span class="pill">Mất kết nối</span>'}[s];
+      const maxI = Math.max(...(this.devices[c.id]?.meta.load || [6,6,6])) * 1.3 || 6;
+      const phs = [0,1,2].map(k => {
+        const i = t.i ? t.i[k] : null, z = t.relay && i !== null && i < CFG.I_ZERO;
+        const w = i === null ? 0 : Math.min(100, i / maxI * 100);
+        return `<div class="ph${z ? ' zero' : ''}"><i style="color:var(--p${'abc'[k]})">${'ABC'[k]}</i>${i === null ? '—' : i.toFixed(1) + ' A'}
+          <div class="bar"><div style="width:${w}%;background:var(--p${'abc'[k]})"></div></div></div>`;
+      }).join('');
+      const al = Object.values(c.active).map(a => `<span class="pill ${ALARM[a.code].sev >= 3 ? 'bad' : 'warn'}">${ALARM[a.code].icon} ${esc(ALARM[a.code].label)}${a.phase && a.phase !== '-' ? ' ' + a.phase : ''}</span>`).join('');
+      const ago = Math.round((Date.now() - c.lastSeen) / 1000);
+      return `<div class="card cab s-${s}" data-key="${esc(c.key)}">
+        <div class="row"><div class="grow"><span class="cid">${esc(c.id)}</span> · ${esc(c.name)}
+          <div class="sub">${esc(c.area)} · ${t.relay ? '💡 Đang sáng' : '⚫ Đang tắt'}${t.mode && t.mode !== 'auto' ? ' (cưỡng bức)' : ''}${t.maint ? ' · 🔧 Bảo trì' : ''} · ${ago < 5 ? 'vừa cập nhật' : ago + ' giây trước'}</div></div>
+          ${c.source === 'mqtt' ? '<span class="pill src">Thật</span>' : ''}${pill}</div>
+        <div class="phases">${phs}</div>
+        ${al ? `<div class="alarms">${al}</div>` : ''}
+      </div>`;
+    }).join('');
+  },
+
+  renderIncs(){
+    const f = this.filter;
+    const list = this.incidents.filter(x => f === 'all' || (f === 'open' ? x.status !== 'done' : x.status === f))
+      .sort((a, b) => (a.status === 'done') - (b.status === 'done') || ALARM[b.code].sev - ALARM[a.code].sev || b.at - a.at);
+    const open = this.incidents.filter(x => x.status === 'new').length;
+    const bd = $('#incBadge'); bd.hidden = !open; bd.textContent = open;
+    const openLogs = new Set([...document.querySelectorAll('#incList details[open]')].map(d => d.closest('.inc').dataset.no));
+    if (!list.length){ $('#incList').innerHTML = '<div class="empty">Không có sự cố nào ở mục này.<br>Sang tab 🧪 Giả lập để tạo thử.</div>'; return; }
+    $('#incList').innerHTML = list.map(x => {
+      const info = ALARM[x.code], sevCls = info.sev >= 3 ? 'bad' : info.sev === 2 ? 'warn' : 'off';
+      const stPill = x.status === 'done' ? 'ok' : x.status === 'new' ? 'bad' : 'warn';
+      const teamOpts = TEAMS.map(t => `<option${t === x.team ? ' selected' : ''}>${esc(t)}</option>`).join('');
+      const btns = x.status === 'done' ? `<button class="btn sm" data-a="reopen">Mở lại</button>` :
+        (x.status === 'new' ? `<button class="btn sm pri" data-a="assign">Giao việc</button>` : '') +
+        (x.status !== 'doing' ? `<button class="btn sm" data-a="doing">Đang xử lý</button>` : '') +
+        `<button class="btn sm" data-a="done">Hoàn thành</button>`;
+      return `<div class="card inc s-${sevCls}" data-no="${esc(x.no)}">
+        <div class="row"><div class="grow"><span class="ttl">${info.icon} ${esc(info.label)}${x.phases.length ? ' – pha ' + x.phases.join(', ') : ''}</span>
+          <div class="sub">${esc(x.no)} · <b>${esc(x.tu)}</b> ${esc(x.name)} · ${esc(x.area)}</div>
+          <div class="sub">🕒 ${fmtTime(x.at)}${x.count > 1 ? ` · lặp ${x.count} lần` : ''}${x.cleared ? ' · <b style="color:var(--ok)">thiết bị báo đã hết</b>' : ''}</div></div>
+          <span class="pill ${stPill}">${STATUS[x.status]}</span></div>
+        <div class="act">👉 ${esc(info.act)}</div>
+        ${x.note ? `<div class="sub" style="margin-top:6px">📝 ${esc(x.note)}</div>` : ''}
+        <div class="btns"><select data-a="team" aria-label="Tổ phụ trách">${teamOpts}</select>${btns}
+          <button class="btn sm" data-a="zalo">📤 Chép tin Zalo</button></div>
+        <details class="log"${openLogs.has(x.no) ? ' open' : ''}><summary>Nhật ký (${x.log.length})</summary>${x.log.map(l => `<div>${fmtTime(l.t)} – ${esc(l.s)}</div>`).join('')}</details>
+      </div>`;
+    }).join('');
+  },
+
+  renderSheet(){
+    const cab = this.cabs[this.openKey]; if (!cab) return;
+    const t = cab.tele || {}, s = this.cabState(cab);
+    const v = t.v || [null,null,null], i = t.i || [null,null,null];
+    const f = n => n === null || n === undefined ? '—' : n;
+    const al = Object.values(cab.active);
+    $('#sheet').innerHTML = `
+      <div class="row"><div class="grow"><h2 style="margin:0">${esc(cab.id)} · ${esc(cab.name)}</h2>
+        <div class="sub">${esc(cab.area)} · phụ trách: ${esc(cab.team)} · ${cab.online ? 'đang kết nối' : '<b style="color:var(--bad)">mất kết nối</b>'}</div></div>
+        <button class="btn sm" id="sheetClose">Đóng</button></div>
+      <h3>Điện 3 pha</h3>
+      <div class="kv">${[0,1,2].map(k => `<div><span>Pha ${'ABC'[k]}</span><b>${f(v[k])} V · ${f(i[k])} A</b></div>`).join('')}
+        <div><span>Công suất</span><b>${f(t.p)} W</b></div><div><span>Điện năng</span><b>${f(t.kwh)} kWh</b></div>
+        <div><span>Relay</span><b>${t.relay ? '💡 Đóng' : '⚫ Cắt'} (${t.mode === 'auto' ? 'tự động' : t.mode === 'on' ? 'cưỡng bức bật' : t.mode === 'off' ? 'cưỡng bức tắt' : '—'})</b></div>
+        <div><span>Cửa tủ</span><b>${t.door ? '🚪 Mở' : 'Đóng'}</b></div><div><span>Độ nghiêng</span><b>${f(t.tilt)}°</b></div>
+        <div><span>Sóng</span><b>${f(t.rssi)} dBm</b></div></div>
+      <h3>Dòng điện 60 mẫu gần nhất</h3>
+      <canvas id="chart"></canvas>
+      <div class="legend"><span><i style="background:var(--pa)"></i>Pha A</span><span><i style="background:var(--pb)"></i>Pha B</span><span><i style="background:var(--pc)"></i>Pha C</span></div>
+      <h3>Cảnh báo đang hoạt động</h3>
+      ${al.length ? al.map(a => `<div class="sub">${ALARM[a.code].icon} <b>${esc(ALARM[a.code].label)}</b>${a.phase && a.phase !== '-' ? ' pha ' + a.phase : ''} – ${esc(a.msg)}</div>`).join('') : '<div class="sub">Không có</div>'}
+      <h3>Điều khiển từ xa</h3>
+      <div class="btns" style="margin-top:0">
+        <button class="btn" data-cmd="on">💡 Bật</button><button class="btn" data-cmd="off">⚫ Tắt</button>
+        <button class="btn" data-cmd="auto">🕒 Theo lịch</button>
+        <button class="btn" data-cmd="${t.maint ? 'maint_off' : 'maint_on'}">${t.maint ? '🔧 Kết thúc bảo trì' : '🔧 Bật chế độ bảo trì'}</button>
+      </div>
+      <p class="note">Bật chế độ bảo trì trước khi cho tổ đến mở tủ, để không báo nhầm "mở cửa trái phép".</p>`;
+    this.drawChart(cab);
+  },
+
+  drawChart(cab){
+    const cv = $('#chart'); if (!cv) return;
+    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+    cv.width = w * dpr; cv.height = h * dpr;
+    const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+    const css = getComputedStyle(document.documentElement);
+    const hist = cab.hist, max = Math.max(1, ...hist.flat().filter(x => x !== null)) * 1.15;
+    ctx.strokeStyle = css.getPropertyValue('--line'); ctx.lineWidth = 1;
+    for (let g = 1; g < 4; g++){ const y = h * g / 4; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+    ctx.fillStyle = css.getPropertyValue('--muted'); ctx.font = '11px system-ui';
+    ctx.fillText(max.toFixed(1) + ' A', 6, 13);
+    ['--pa','--pb','--pc'].forEach((c, k) => {
+      ctx.strokeStyle = css.getPropertyValue(c).trim(); ctx.lineWidth = 2; ctx.beginPath();
+      hist.forEach((p, n) => { const x = w * n / 59, y = h - 6 - ((p[k] ?? 0) / max) * (h - 18); n ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.stroke();
+    });
+  },
+
+  render(){
+    const now = Date.now();
+    Object.values(this.cabs).forEach(c => Object.keys(c.active).forEach(k => { if (c.active[k].exp && c.active[k].exp < now) delete c.active[k]; }));
+    this.renderCabs();
+    if (this.incDirty){ this.incDirty = false; this.renderIncs(); }   // chỉ vẽ lại khi có thay đổi
+    if (this.openKey) this.renderSheet();
+  },
+
+  /* ---------- Báo cáo ---------- */
+  zaloText(x){
+    const info = ALARM[x.code], cab = this.cabs[x.cab], t = cab?.tele || {};
+    const lines = [`🚨 [${x.no}] ${info.label}${x.phases.length ? ' – pha ' + x.phases.join(', ') : ''}`,
+      `Tủ: ${x.tu} – ${x.name} (${x.area})`, `Lúc: ${fmtTime(x.at)}`];
+    if (t.i) lines.push(`Dòng hiện tại: A ${t.i[0] ?? '—'}A · B ${t.i[1] ?? '—'}A · C ${t.i[2] ?? '—'}A`);
+    lines.push(`Giao: ${x.team}`, `Hướng xử lý: ${info.act}`);
+    return lines.join('\n');
+  },
+  report(){
+    const d = new Date(Clock.ms), day = x => new Date(x.at).toDateString() === d.toDateString();
+    const today = this.incidents.filter(day);
+    const by = (arr, fn) => arr.reduce((m, x) => (m[fn(x)] = (m[fn(x)] || 0) + 1, m), {});
+    const types = by(today, x => ALARM[x.code].label), teams = by(today, x => x.team);
+    const open = this.incidents.filter(x => x.status !== 'done');
+    let r = `BÁO CÁO SỰ CỐ NGÀY ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}\n`;
+    r += `Tổng phát sinh trong ngày: ${today.length} · Đã xong: ${today.filter(x => x.status === 'done').length}\n\n`;
+    r += 'Theo loại:\n' + (Object.entries(types).map(([k, v]) => `  • ${k}: ${v}`).join('\n') || '  (không có)') + '\n\n';
+    r += 'Theo tổ:\n' + (Object.entries(teams).map(([k, v]) => `  • ${k}: ${v}`).join('\n') || '  (không có)') + '\n\n';
+    r += `Tồn chưa xong (tất cả các ngày): ${open.length}\n`;
+    r += open.map(x => `  • ${x.no} ${x.tu} – ${ALARM[x.code].label} – ${x.team} – ${STATUS[x.status]}`).join('\n');
+    return r;
+  },
+  csv(){
+    const head = ['Mã','Thời gian','Tủ','Tên tủ','Khu vực','Loại sự cố','Pha','Mức độ','Trạng thái','Tổ phụ trách','Số lần lặp','Thiết bị báo hết','Ghi chú'];
+    const sev = {3:'Khẩn', 2:'Cao', 1:'Thường'};
+    const rows = this.incidents.map(x => [x.no, fmtTime(x.at), x.tu, x.name, x.area, ALARM[x.code].label, x.phases.join(' '),
+      sev[ALARM[x.code].sev], STATUS[x.status], x.team, x.count, x.cleared ? 'Có' : 'Không', x.note]);
+    const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const text = '\ufeff' + [head, ...rows].map(r => r.map(q).join(',')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], {type:'text/csv;charset=utf-8'}));
+    const d = new Date(Clock.ms); a.download = `su-co-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+};
+
+/* ===================== Bảng sự cố giả lập ===================== */
+const FAULTS = [
+  {k:'cutA', icon:'✂️', label:'Cắt trộm cáp pha A', hint:'Mất dòng, điện áp vẫn còn'},
+  {k:'cutB', icon:'✂️', label:'Cắt trộm cáp pha B', hint:'Mất dòng, điện áp vẫn còn'},
+  {k:'cutC', icon:'✂️', label:'Cắt trộm cáp pha C', hint:'Mất dòng, điện áp vẫn còn'},
+  {k:'crash', icon:'💥', label:'Xe va chạm', hint:'Rung mạnh + tủ nghiêng 22°', once:true},
+  {k:'door', icon:'🚪', label:'Mở cửa tủ', hint:'Báo nếu không ở chế độ bảo trì'},
+  {k:'mains', icon:'⚡', label:'Mất điện lưới', hint:'Không báo nhầm thành cắt cáp'},
+  {k:'contactorFail', icon:'🌑', label:'Hỏng contactor', hint:'Thử: bật lỗi rồi nhảy giờ 17:59'},
+  {k:'contactorStuck', icon:'☀️', label:'Dính contactor', hint:'Thử: bật lỗi rồi nhảy giờ 05:29'},
+  {k:'offline', icon:'📡', label:'Mất sóng 4G', hint:'Thiết bị giữ cảnh báo, gửi bù sau'},
+  {k:'meterFail', icon:'🔌', label:'Lỗi đồng hồ RS485', hint:'Không đọc được Modbus'}
+];
+function faultActive(d, k){
+  if (k.startsWith('cut')) return d.faults.cut['ABC'.indexOf(k[3])];
+  if (k === 'crash') return d.tilt > CFG.TILT_ALARM;
+  return d.faults[k];
+}
+function toggleFault(d, k, force){
+  const on = force ?? !faultActive(d, k);
+  if (k.startsWith('cut')) d.faults.cut['ABC'.indexOf(k[3])] = on;
+  else if (k === 'crash'){ if (on){ d.vib = rnd(1.2, 2.5); d.tilt = 22 + rnd(0, 6); } else d.tilt = rnd(0.2, 1.2); }
+  else if (k === 'offline') d.setOffline(on);
+  else d.faults[k] = on;
+}
+function restore(d){
+  FAULTS.forEach(f => { if (faultActive(d, f.k)) toggleFault(d, f.k, false); });
+}
+function renderFaults(){
+  const d = App.devices[$('#simCab').value]; if (!d) return;
+  $('#faults').innerHTML = FAULTS.map(f => `<button class="btn${faultActive(d, f.k) ? ' on' : ''}" data-f="${f.k}">${f.icon} ${f.label}<small>${f.hint}</small></button>`).join('');
+}
+
+/* ===================== Vòng lặp chính (1 giây) ===================== */
+let randomTimer = 0;
+function loop(){
+  Clock.ms += 1000 * Clock.speed;
+  const d = Clock.date();
+  $('#simTime').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  $('#dayIcon').textContent = isNightAt(d) ? '🌙' : '☀️';
+
+  Object.values(App.devices).forEach(dev => dev.step());
+
+  // Phát hiện mất kết nối phía app (thiết bị im lặng quá lâu)
+  Object.values(App.cabs).forEach(c => { if (c.online && Date.now() - c.lastSeen > CFG.OFFLINE_AFTER_S * 1000) App.markOffline(c, 'Không nhận được dữ liệu quá ' + CFG.OFFLINE_AFTER_S + ' giây'); });
+
+  if (App.random && --randomTimer <= 0){
+    randomTimer = Math.round(rnd(25, 45));
+    const devs = Object.values(App.devices), dev = devs[Math.floor(Math.random() * devs.length)];
+    const pool = ['cutA','cutB','cutC','crash','door','mains','offline'];
+    const k = pool[Math.floor(Math.random() * pool.length)];
+    toggleFault(dev, k, true);
+    setTimeout(() => { toggleFault(dev, k, false); renderFaults(); }, rnd(40, 90) * 1000);
+    renderFaults();
+  }
+  App.render();
+  Bus.flush();
+}
+
+/* ===================== Sự kiện giao diện ===================== */
+function showView(v){
+  document.querySelectorAll('.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
+  document.querySelectorAll('nav.bottom button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  if (v === 'sim') renderFaults();
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll('nav.bottom button').forEach(b => b.onclick = () => showView(b.dataset.v));
+$('#speed').onchange = e => Clock.speed = +e.target.value;
+
+$('#cabList').onclick = e => {
+  const c = e.target.closest('.cab'); if (!c) return;
+  App.openKey = c.dataset.key; App.renderSheet();
+  $('#sheet').classList.add('on'); $('#sheetBg').classList.add('on');
+};
+function closeSheet(){ App.openKey = null; $('#sheet').classList.remove('on'); $('#sheetBg').classList.remove('on'); }
+$('#sheetBg').onclick = closeSheet;
+$('#sheet').onclick = e => {
+  if (e.target.id === 'sheetClose') return closeSheet();
+  const b = e.target.closest('[data-cmd]'); if (b) App.sendCmd(App.cabs[App.openKey], b.dataset.cmd);
+};
+
+$('#incTabs').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  App.filter = b.dataset.f; App.incDirty = true;
+  document.querySelectorAll('#incTabs button').forEach(x => x.classList.toggle('on', x === b));
+  App.renderIncs();
+};
+$('#incList').addEventListener('click', e => {
+  const b = e.target.closest('button[data-a]'); if (!b) return;
+  const x = App.incidents.find(i => i.no === b.closest('.inc').dataset.no); if (!x) return;
+  const now = App.nowFor(App.cabs[x.cab] || {source:'sim'});
+  const a = b.dataset.a;
+  if (a === 'zalo'){
+    const txt = App.zaloText(x);
+    (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast('Đã chép – dán vào nhóm Zalo'), () => prompt('Chép nội dung này:', txt));
+    return;
+  }
+  if (a === 'assign'){ x.status = 'assigned'; x.log.push({t: now, s: `Giao cho ${x.team}`}); toast(`${x.no} đã giao cho ${x.team}`); }
+  if (a === 'doing'){ x.status = 'doing'; x.log.push({t: now, s: `${x.team} đang xử lý`}); }
+  if (a === 'done'){
+    const note = prompt('Ghi chú kết quả xử lý (VD: đã nối lại 30m cáp, đã báo CA phường):', x.note || '');
+    if (note === null) return;
+    x.note = note; x.status = 'done'; x.log.push({t: now, s: `Hoàn thành${note ? ': ' + note : ''}`});
+  }
+  if (a === 'reopen'){ x.status = 'assigned'; x.log.push({t: now, s: 'Mở lại'}); }
+  App.save(); App.incDirty = true; App.render();
+});
+$('#incList').addEventListener('change', e => {
+  if (e.target.dataset.a !== 'team') return;
+  const x = App.incidents.find(i => i.no === e.target.closest('.inc').dataset.no); if (!x) return;
+  x.team = e.target.value; x.log.push({t: App.nowFor(App.cabs[x.cab] || {source:'sim'}), s: `Đổi tổ phụ trách: ${x.team}`});
+  App.save();
+});
+
+$('#btnCsv').onclick = () => App.csv();
+$('#btnReport').onclick = () => {
+  App.openKey = null;
+  const r = App.report();
+  $('#sheet').innerHTML = `<div class="row"><h2 class="grow" style="margin:0">Báo cáo trong ngày</h2><button class="btn sm" id="sheetClose">Đóng</button></div>
+    <pre class="report">${esc(r)}</pre><div class="btns"><button class="btn pri" id="copyRep">📤 Chép báo cáo</button></div>`;
+  $('#copyRep').onclick = () => (navigator.clipboard ? navigator.clipboard.writeText(r) : Promise.reject()).then(() => toast('Đã chép báo cáo'), () => prompt('Chép:', r));
+  $('#sheet').classList.add('on'); $('#sheetBg').classList.add('on');
+};
+
+$('#simCab').innerHTML = SAMPLE.map(m => `<option value="${m.id}">${m.id} – ${esc(m.name)}</option>`).join('');
+$('#simCab').onchange = renderFaults;
+$('#faults').onclick = e => {
+  const b = e.target.closest('[data-f]'); if (!b) return;
+  const d = App.devices[$('#simCab').value]; toggleFault(d, b.dataset.f);
+  renderFaults();
+};
+$('#btnRestore').onclick = () => { restore(App.devices[$('#simCab').value]); renderFaults(); toast('Đã khôi phục tủ về bình thường'); };
+$('#btnRandom').onclick = e => { App.random = !App.random; randomTimer = 3; e.target.textContent = `🎲 Sự cố ngẫu nhiên: ${App.random ? 'BẬT' : 'TẮT'}`; e.target.classList.toggle('on', App.random); };
+document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => { Clock.jump(b.dataset.jump); toast('Đã nhảy tới ' + b.dataset.jump.slice(0, 5) + ' – đặt tốc độ 60× để xem chuyển giờ'); });
+$('#btnClear').onclick = () => { Bus.lines = []; Bus.dirty = true; Bus.flush(); };
+$('#btnSound').onclick = e => {
+  App.sound = !App.sound;
+  if (App.sound && !App.ac){ try { App.ac = new (window.AudioContext || window.webkitAudioContext)(); } catch(err){} }
+  e.target.textContent = App.sound ? '🔔 Âm báo: BẬT' : '🔕 Âm báo: TẮT';
+};
+$('#btnReset').onclick = () => {
+  if (!confirm('Xoá toàn bộ danh sách sự cố đã lưu?')) return;
+  App.incidents = []; App.seq = 0;
+  Object.values(App.cabs).forEach(c => c.active = {});
+  Object.values(App.devices).forEach(d => Object.values(d.alarms).forEach(a => { a.active = false; a.cnt = 0; }));
+  App.save(); App.incDirty = true; App.render();
+};
+
+/* ---------- MQTT thật (Wokwi / ESP32) ---------- */
+function loadScript(src){
+  return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = fail; document.head.appendChild(s); });
+}
+$('#btnMq').onclick = async () => {
+  const st = $('#mqState');
+  if (App.mq){ App.mq.end(true); App.mq = null; st.textContent = 'Đã ngắt'; $('#btnMq').textContent = 'Kết nối'; return; }
+  try {
+    st.textContent = 'Đang tải thư viện…';
+    if (!window.mqtt) await loadScript('https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js');
+    const root = App.root();
+    st.textContent = 'Đang kết nối…';
+    App.mq = mqtt.connect($('#mqUrl').value.trim(), {clientId: 'web-' + Math.random().toString(16).slice(2, 10), reconnectPeriod: 5000, connectTimeout: 10000});
+    App.mq.on('connect', () => { App.mq.subscribe(root + '/tu/+/+'); st.textContent = `Đã kết nối · nghe ${root}/tu/+/…`; $('#btnMq').textContent = 'Ngắt'; });
+    App.mq.on('message', (topic, buf) => {
+      if (topic.endsWith('/cmd')) return;
+      const text = buf.toString(); Bus.log(topic, text); App.onMessage(topic, text, 'mqtt');
+    });
+    App.mq.on('error', err => st.textContent = 'Lỗi: ' + err.message);
+    App.mq.on('offline', () => st.textContent = 'Mất kết nối broker, đang thử lại…');
+  } catch(err){ st.textContent = 'Không tải được thư viện MQTT (kiểm tra mạng)'; App.mq = null; }
+};
+
+/* ---------- Khởi động ---------- */
+App.init();
+loop();
+setInterval(loop, 1000);
+window.addEventListener('resize', () => App.openKey && App.drawChart(App.cabs[App.openKey]));
+</script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+# Wokwi library management
+PubSubClient
+ModbusMaster
